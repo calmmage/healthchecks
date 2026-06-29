@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from datetime import timedelta as td
-from datetime import timezone
 from unittest import TestCase
-from unittest.mock import Mock, patch
+
+import time_machine
 
 from hc.lib.date import (
+    day_boundaries,
     format_approx_duration,
+    format_duration_for_sentence,
     format_hms,
     month_boundaries,
     seconds_in_month,
@@ -15,7 +17,6 @@ from hc.lib.date import (
 )
 
 CURRENT_TIME = datetime(2020, 1, 15, tzinfo=timezone.utc)
-MOCK_NOW = Mock(return_value=CURRENT_TIME)
 
 
 class DateFormattingTestCase(TestCase):
@@ -62,7 +63,28 @@ class ApproxFormattingTestCase(TestCase):
         self.assertEqual(s, "12 min 24 sec")
 
 
-@patch("hc.lib.date.now", MOCK_NOW)
+class ForSentenceFormattingTestCase(TestCase):
+    def test_it_works(self) -> None:
+        samples = [
+            (td(days=3, hours=6, minutes=12, seconds=24), "3 days, 6 hours"),
+            (td(days=1, hours=6, minutes=12, seconds=24), "1 day, 6 hours"),
+            (td(days=3, hours=1, minutes=12, seconds=24), "3 days, 1 hour"),
+            (td(hours=6, minutes=12, seconds=24), "6 hours, 12 minutes"),
+            (td(hours=1, minutes=12, seconds=24), "1 hour, 12 minutes"),
+            (td(hours=6, minutes=1, seconds=24), "6 hours, 1 minute"),
+            (td(minutes=12, seconds=24), "12 minutes, 24 seconds"),
+            (td(minutes=1, seconds=24), "1 minute, 24 seconds"),
+            (td(minutes=12, seconds=1), "12 minutes, 1 second"),
+            (td(seconds=12), "12 seconds"),
+            (td(seconds=1), "1 second"),
+            (td(milliseconds=500), "0 seconds"),
+        ]
+
+        for duration, expected in samples:
+            self.assertEqual(format_duration_for_sentence(duration), expected)
+
+
+@time_machine.travel(CURRENT_TIME)
 class MonthBoundaryTestCase(TestCase):
     def test_utc_works(self) -> None:
         result = month_boundaries(3, "UTC")
@@ -77,7 +99,7 @@ class MonthBoundaryTestCase(TestCase):
         self.assertEqual(result[2].isoformat(), "2019-11-01T00:00:00+02:00")
 
 
-@patch("hc.lib.date.now", MOCK_NOW)
+@time_machine.travel(CURRENT_TIME)
 class WeekBoundaryTestCase(TestCase):
     def test_utc_works(self) -> None:
         result = week_boundaries(3, "UTC")
@@ -90,6 +112,21 @@ class WeekBoundaryTestCase(TestCase):
         self.assertEqual(result[0].isoformat(), "2020-01-13T00:00:00+02:00")
         self.assertEqual(result[1].isoformat(), "2020-01-06T00:00:00+02:00")
         self.assertEqual(result[2].isoformat(), "2019-12-30T00:00:00+02:00")
+
+
+@time_machine.travel(CURRENT_TIME)
+class DayBoundaryTestCase(TestCase):
+    def test_utc_works(self) -> None:
+        result = day_boundaries(3, "UTC")
+        self.assertEqual(result[0].isoformat(), "2020-01-15T00:00:00+00:00")
+        self.assertEqual(result[1].isoformat(), "2020-01-14T00:00:00+00:00")
+        self.assertEqual(result[2].isoformat(), "2020-01-13T00:00:00+00:00")
+
+    def test_non_utc_works(self) -> None:
+        result = day_boundaries(3, "Europe/Riga")
+        self.assertEqual(result[0].isoformat(), "2020-01-15T00:00:00+02:00")
+        self.assertEqual(result[1].isoformat(), "2020-01-14T00:00:00+02:00")
+        self.assertEqual(result[2].isoformat(), "2020-01-13T00:00:00+02:00")
 
 
 class SecondsInMonthTestCase(TestCase):

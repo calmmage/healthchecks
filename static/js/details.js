@@ -9,7 +9,7 @@ $(function () {
         return false;
     });
 
-    // Configure Selectize for entering tags
+    // Configure Tom-Select for entering tags
     function toOption(tag) {
         return {value: tag}
     }
@@ -18,16 +18,18 @@ $(function () {
     // to a JS object, but we need an unconverted string:
     var allTags = $("#update-tags-input").attr("data-all-tags");
     var options = allTags ? allTags.split(" ").map(toOption) : [];
-    $("#update-tags-input").selectize({
+    new TomSelect("#update-tags-input", {
         create: true,
         createOnBlur: true,
-        selectOnTab: false,
         delimiter: " ",
-        labelField: "value",
-        searchField: ["value"],
+        diacritics: false,
         hideSelected: true,
         highlight: false,
-        options: options
+        labelField: "value",
+        options: options,
+        refreshThrottle: 0,
+        render: {no_results:(data, escape) => ""},
+        searchField: ["value"],
     });
 
     $("#new-check-alert a").click(function() {
@@ -80,7 +82,8 @@ $(function () {
 
     var statusUrl = document.getElementById("events").dataset.statusUrl;
     // Look up the active tz switch to determine the initial display timezone:
-    var lastFormat = $(".active", "#format-switcher").data("format");
+    var initialTz = $(".active", "#tz-switcher").data("tz");
+    var dateFormatter = new DateFormatter(initialTz);
     var lastStatusText = "";
     var lastUpdated = "";
     var lastStarted = false;
@@ -106,7 +109,7 @@ $(function () {
                 if (data.events) {
                     lastUpdated = data.updated;
                     $("#log-container").html(data.events);
-                    switchDateFormat(lastFormat);
+                    formatPingDates();
                 }
 
                 if (data.downtimes) {
@@ -122,18 +125,6 @@ $(function () {
         });
     }, true);
 
-    // Copy to clipboard
-    $("button.copy-btn")
-        .click(function() {
-            navigator.clipboard.writeText(this.dataset.clipboardText);
-            this.textContent = "Copied!";
-        })
-        .mouseout(function(e) {
-            setTimeout(function() {
-                e.target.textContent = e.target.dataset.label;
-            }, 300);
-        });
-
     $("#events").on("click", "tr.ok", function() {
         var n = $("td", this).first().text();
         var tmpl = $("#log").data("url").slice(0, -2);
@@ -141,20 +132,11 @@ $(function () {
         return false;
     });
 
-    function switchDateFormat(format) {
-        lastFormat = format;
-        var currentYear = moment().year();
-
+    function formatPingDates() {
         document.querySelectorAll("#log tr").forEach(function(row) {
-            var dt = moment.unix(row.dataset.dt).utc();
-            format == "local" ? dt.local() : dt.tz(format);
-            var dateFormat = "MMM D";
-            if (dt.year() != currentYear) {
-                dateFormat = "MMM D, YYYY";
-            }
-
-            row.children[1].textContent = dt.format(dateFormat);
-            row.children[2].textContent = dt.format("HH:mm");
+            var dt = new Date(row.dataset.dt * 1000);
+            row.children[1].textContent = dateFormatter.formatDate(dt);
+            row.children[2].textContent = dateFormatter.formatTime(dt);
         })
 
         // The table is initially hidden to avoid flickering as we convert dates.
@@ -163,9 +145,9 @@ $(function () {
     }
 
 
-    $("#format-switcher").click(function(ev) {
-        var format = ev.target.dataset.format;
-        switchDateFormat(format);
+    $("#tz-switcher").click(function(ev) {
+        dateFormatter.setTimezone(ev.target.dataset.tz);
+        formatPingDates();
     });
 
     var transferFormLoadStarted = false;
@@ -177,6 +159,17 @@ $(function () {
         $.get(this.dataset.url, function(data) {
             $("#transfer-modal" ).html(data);
         });
+    });
+
+    $(".click-to-copy").tooltip({ container: "body", title: "Click to copy" });
+    $(".click-to-copy").click(function (e) {
+        if (window.getSelection().toString()) {
+            // do nothing, selection not empty
+            return;
+        }
+
+        navigator.clipboard.writeText(this.textContent);
+        $(".tooltip-inner").text("Copied!");
     });
 
     // Enable the submit button in transfer form when user selects

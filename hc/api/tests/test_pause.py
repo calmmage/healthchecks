@@ -13,8 +13,7 @@ class PauseTestCase(BaseTestCase):
         super().setUp()
 
         self.check = Check.objects.create(project=self.project, status="up")
-        self.url = f"/api/v2/checks/{self.check.code}/pause"
-        self.urlv1 = f"/api/v2/checks/{self.check.code}/pause"
+        self.url = f"/api/v3/checks/{self.check.code}/pause"
 
     def test_it_works(self) -> None:
         r = self.csrf_client.post(
@@ -111,3 +110,18 @@ class PauseTestCase(BaseTestCase):
         self.assertEqual(
             r.json()["error"], "json validation error: value is not an object"
         )
+
+    def test_it_does_not_pause_already_paused_check(self) -> None:
+        self.check.status = "paused"
+        self.check.save()
+
+        r = self.csrf_client.post(
+            self.url, "", content_type="application/json", HTTP_X_API_KEY="X" * 32
+        )
+        self.assertEqual(r.status_code, 200)
+
+        self.check.refresh_from_db()
+        self.assertEqual(self.check.status, "paused")
+
+        # It should not create a Flip object, as the check was already paused
+        self.assertFalse(Flip.objects.exists())

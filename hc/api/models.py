@@ -4,11 +4,12 @@ import hashlib
 import json
 import socket
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from datetime import timedelta as td
-from datetime import timezone
-from typing import Any, TypedDict
+from importlib import import_module
+from typing import Any, NotRequired, TypedDict
 from zoneinfo import ZoneInfo
 
 from cronsim import CronSim
@@ -17,20 +18,21 @@ from django.contrib.auth.models import User
 from django.contrib.humanize.templatetags.humanize import naturaltime
 from django.core.mail import mail_admins
 from django.core.signing import TimestampSigner
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import F, QuerySet
 from django.http import HttpRequest
 from django.urls import reverse
 from django.utils.functional import cached_property
 from django.utils.timezone import now
+from oncalendar import OnCalendar
+from pydantic import BaseModel, Field
+
 from hc.accounts.models import Project
 from hc.api import transports
 from hc.lib import emails
 from hc.lib.date import month_boundaries, seconds_in_month
 from hc.lib.s3 import GetObjectError, get_object, put_object, remove_objects
 from hc.lib.urls import absolute_reverse
-from oncalendar import OnCalendar
-from pydantic import BaseModel, Field
 
 STATUSES = (("up", "Up"), ("down", "Down"), ("new", "New"), ("paused", "Paused"))
 DEFAULT_TIMEOUT = td(days=1)
@@ -42,38 +44,39 @@ MAX_DURATION = td(hours=72)
 REASONS = (("", "Unknown"), ("timeout", "Timeout"), ("fail", "Fail signal"))
 
 
-TRANSPORTS: dict[str, tuple[str, type[transports.Transport]]] = {
-    "apprise": ("Apprise", transports.Apprise),
-    "call": ("Phone Call", transports.Call),
-    "discord": ("Discord", transports.Discord),
-    "email": ("Email", transports.Email),
-    "github": ("GitHub", transports.GitHub),
-    "googlechat": ("Google Chat", transports.GoogleChat),
-    "gotify": ("Gotify", transports.Gotify),
-    "group": ("Group", transports.Group),
-    "linenotify": ("LINE Notify (stops working Apr 2025)", transports.RemovedTransport),
-    "matrix": ("Matrix", transports.Matrix),
-    "mattermost": ("Mattermost", transports.Mattermost),
-    "msteams": ("MS Teams Connector (stops working Jan 2025)", transports.MsTeams),
-    "msteamsw": ("Microsoft Teams", transports.MsTeamsWorkflow),
-    "ntfy": ("ntfy", transports.Ntfy),
-    "opsgenie": ("Opsgenie", transports.Opsgenie),
-    "pagertree": ("PagerTree", transports.PagerTree),
-    "pd": ("PagerDuty", transports.PagerDuty),
-    "po": ("Pushover", transports.Pushover),
-    "pushbullet": ("Pushbullet", transports.Pushbullet),
-    "rocketchat": ("Rocket.Chat", transports.RocketChat),
-    "shell": ("Shell Command", transports.Shell),
-    "signal": ("Signal", transports.Signal),
-    "slack": ("Slack", transports.Slack),
-    "sms": ("SMS", transports.Sms),
-    "spike": ("Spike", transports.Spike),
-    "telegram": ("Telegram", transports.Telegram),
-    "trello": ("Trello", transports.Trello),
-    "victorops": ("Splunk On-Call", transports.VictorOps),
-    "webhook": ("Webhook", transports.Webhook),
-    "whatsapp": ("WhatsApp", transports.WhatsApp),
-    "zulip": ("Zulip", transports.Zulip),
+TRANSPORTS: dict[str, tuple[str, type[transports.Transport] | str]] = {
+    "apprise": ("Apprise", "hc.integrations.apprise.transport.Apprise"),
+    "call": ("Phone Call", "hc.integrations.call.transport.Call"),
+    "discord": ("Discord", "hc.integrations.discord.transport.Discord"),
+    "email": ("Email", "hc.integrations.email.transport.Email"),
+    "github": ("GitHub", "hc.integrations.github.transport.GitHub"),
+    "googlechat": ("Google Chat", "hc.integrations.googlechat.transport.GoogleChat"),
+    "gotify": ("Gotify", "hc.integrations.gotify.transport.Gotify"),
+    "group": ("Group", "hc.integrations.group.transport.Group"),
+    "matrix": ("Matrix", "hc.integrations.matrix.transport.Matrix"),
+    "mattermost": ("Mattermost", "hc.integrations.mattermost.transport.Mattermost"),
+    "msteamsw": (
+        "Microsoft Teams",
+        "hc.integrations.msteamsw.transport.MsTeamsWorkflow",
+    ),
+    "ntfy": ("ntfy", "hc.integrations.ntfy.transport.Ntfy"),
+    "opsgenie": ("Opsgenie", "hc.integrations.opsgenie.transport.Opsgenie"),
+    "pagertree": ("PagerTree", "hc.integrations.pagertree.transport.PagerTree"),
+    "pd": ("PagerDuty", "hc.integrations.pd.transport.PagerDuty"),
+    "po": ("Pushover", "hc.integrations.po.transport.Pushover"),
+    "pushbullet": ("Pushbullet", "hc.integrations.pushbullet.transport.Pushbullet"),
+    "rocketchat": ("Rocket.Chat", "hc.integrations.rocketchat.transport.RocketChat"),
+    "shell": ("Shell Command", "hc.integrations.shell.transport.Shell"),
+    "signal": ("Signal", "hc.integrations.signal.transport.Signal"),
+    "slack": ("Slack", "hc.integrations.slack.transport.Slack"),
+    "sms": ("SMS", "hc.integrations.sms.transport.Sms"),
+    "spike": ("Spike", "hc.integrations.spike.transport.Spike"),
+    "telegram": ("Telegram", "hc.integrations.telegram.transport.Telegram"),
+    "trello": ("Trello", "hc.integrations.trello.transport.Trello"),
+    "victorops": ("Splunk On-Call", "hc.integrations.victorops.transport.VictorOps"),
+    "webhook": ("Webhook", "hc.integrations.webhook.transport.Webhook"),
+    "whatsapp": ("WhatsApp", "hc.integrations.whatsapp.transport.WhatsApp"),
+    "zulip": ("Zulip", "hc.integrations.zulip.transport.Zulip"),
 }
 
 
@@ -89,12 +92,19 @@ PO_PRIORITIES = {
 }
 
 NTFY_PRIORITIES = {
-    5: "max",
-    4: "high",
-    3: "default",
-    2: "low",
-    1: "min",
+    5: "max priority",
+    4: "high priority",
+    3: "default priority",
+    2: "low priority",
+    1: "min priority",
     0: "disabled",
+}
+
+GOTIFY_PRIORITIES = {
+    0: "disabled",
+    2: "low priority",
+    5: "normal priority",
+    9: "high priority",
 }
 
 
@@ -103,8 +113,8 @@ def isostring(dt: datetime | None) -> str | None:
     return dt.replace(microsecond=0).isoformat() if dt else None
 
 
-class CheckDict(TypedDict, total=False):
-    uuid: str | None
+class CheckDict(TypedDict):
+    uuid: NotRequired[str]
     name: str
     slug: str
     tags: str
@@ -124,17 +134,19 @@ class CheckDict(TypedDict, total=False):
     failure_kw: str
     filter_subject: bool
     filter_body: bool
+    filter_http_body: bool
+    filter_default_fail: bool
     badge_url: str
-    last_duration: int
-    unique_key: str
-    ping_url: str
-    update_url: str
-    pause_url: str
-    resume_url: str
-    channels: str
-    timeout: int
-    schedule: str
-    tz: str
+    last_duration: NotRequired[int]
+    unique_key: NotRequired[str]
+    ping_url: NotRequired[str]
+    update_url: NotRequired[str]
+    pause_url: NotRequired[str]
+    resume_url: NotRequired[str]
+    channels: NotRequired[str]
+    timeout: NotRequired[int]
+    schedule: NotRequired[str]
+    tz: NotRequired[str]
 
 
 @dataclass
@@ -191,6 +203,8 @@ class Check(models.Model):
     tz = models.CharField(max_length=36, default="UTC")
     filter_subject = models.BooleanField(default=False)
     filter_body = models.BooleanField(default=False)
+    filter_http_body = models.BooleanField(default=False)
+    filter_default_fail = models.BooleanField(default=False)
     start_kw = models.CharField(max_length=200, blank=True)
     success_kw = models.CharField(max_length=200, blank=True)
     failure_kw = models.CharField(max_length=200, blank=True)
@@ -206,6 +220,9 @@ class Check(models.Model):
     has_confirmation_link = models.BooleanField(default=False)
     alert_after = models.DateTimeField(null=True, blank=True, editable=False)
     status = models.CharField(max_length=6, choices=STATUSES, default="new")
+
+    # Used to pass downtime data to report templates. Not persisted to db.
+    past_downtimes: list[DowntimeRecord] | None = None
 
     class Meta:
         indexes = [
@@ -361,14 +378,32 @@ class Check(models.Model):
 
         return "up"
 
-    def lock_and_delete(self) -> None:
-        """Acquire a DB lock for this check, then delete the check.
+    def rename_and_delete(self) -> None:
+        """Change check's code and slug, then delete the check.
 
-        Without the lock the delete can fail, if the check gets pinged while it is
-        in the process of deletion.
+        Without changing code and slug first, the check can get pinged during
+        deletion. The deletion would then fail due to foreign key violation.
+
+        This function:
+
+        1. Updates check's code and slug to a random value
+        2. Deletes the check. This step can still fail if a separate process inserts
+           a ping between steps 1 and 2.
+        3. If delete fails, retries it once. This can *still* fail, but is less likely.
+
         """
-        with transaction.atomic():
-            Check.objects.select_for_update().filter(id=self.id).delete()
+
+        throwaway_uuid = uuid.uuid4()
+        q = Check.objects.filter(id=self.id)
+
+        # Rename so it cannot be pinged any longer
+        q.update(code=throwaway_uuid, slug=str(throwaway_uuid))
+
+        try:
+            q.delete()
+        except IntegrityError:
+            # Retry once
+            q.delete()
 
     def assign_all_channels(self) -> None:
         channels = Channel.objects.filter(project=self.project)
@@ -397,6 +432,9 @@ class Check(models.Model):
         code_half = self.code.hex[:16]
         return hashlib.sha1(code_half.encode()).hexdigest()
 
+    def filter_any(self) -> bool:
+        return self.filter_subject or self.filter_body or self.filter_http_body
+
     def to_dict(self, *, readonly: bool = False, v: int = 3) -> CheckDict:
         with_started = v == 1
         result: CheckDict = {
@@ -419,6 +457,8 @@ class Check(models.Model):
             "failure_kw": self.failure_kw,
             "filter_subject": self.filter_subject,
             "filter_body": self.filter_body,
+            "filter_http_body": self.filter_http_body,
+            "filter_default_fail": self.filter_default_fail,
             # Optimization: construct badge URLs manually instead of using reverse().
             # This is significantly quicker when returning hundreds of checks.
             "badge_url": f"{settings.SITE_ROOT}/b/2/{self.badge_key}.svg",
@@ -506,7 +546,6 @@ class Check(models.Model):
             body_lowercase = body.decode(errors="replace").lower()
             self.has_confirmation_link = "confirm" in body_lowercase
             self.save()
-            self.refresh_from_db()
 
             ping = Ping(owner=self)
             ping.n = self.n_pings
@@ -636,7 +675,7 @@ class Check(models.Model):
         flip.save()
 
 
-class PingDict(TypedDict, total=False):
+class PingDict(TypedDict):
     type: str
     date: str
     n: int | None
@@ -645,7 +684,7 @@ class PingDict(TypedDict, total=False):
     method: str
     ua: str
     rid: uuid.UUID | None
-    duration: float
+    duration: NotRequired[float]
     body_url: str | None
 
 
@@ -667,10 +706,14 @@ class Ping(models.Model):
     class GetBodyError(Exception):
         pass
 
-    def to_dict(self) -> PingDict:
+    def to_dict(self, owner_code: uuid.UUID, v: int) -> PingDict:
         if self.has_body():
-            args = [self.owner.code, self.n]
-            body_url = absolute_reverse("hc-api-ping-body", args=args)
+            # Optimization: construct API URLs manually instead of using reverse().
+            # This is significantly quicker when returning hundreds of pings.
+            body_url = (
+                f"{settings.SITE_ROOT}/api/v{v}/checks/{owner_code}/pings/{self.n}/body"
+            )
+
         else:
             body_url = None
 
@@ -688,7 +731,9 @@ class Ping(models.Model):
 
         duration = self.duration
         if duration is not None:
-            result["duration"] = duration.total_seconds()
+            # HTTP request timing is imprecise, so millisecond precision is not
+            # useful here, and just wastes bandwidth
+            result["duration"] = round(duration.total_seconds(), 2)
 
         return result
 
@@ -727,7 +772,7 @@ class Ping(models.Model):
             return None
 
         if body_bytes:
-            return bytes(body_bytes).decode(errors="replace")
+            return body_bytes.decode(errors="replace")
 
         return None
 
@@ -750,13 +795,17 @@ class Ping(models.Model):
         if self.kind == "log":
             return "Log"
 
+        # If it's not ign, fail, start, or log, the only remaining option
+        # is None (success). This assert makes sure we are not reporting invalid,
+        # unexpected values as success by accident.
+        assert self.kind is None
         return "Success"
 
     @cached_property
     def duration(self) -> td | None:
         # Return early if this is not a success or failure ping,
         # or if this is the very first ping:
-        if self.kind not in (None, "", "fail") or self.n == 1:
+        if self.kind not in (None, "fail") or self.n == 1:
             return None
 
         pings = Ping.objects.filter(owner=self.owner_id)
@@ -767,7 +816,7 @@ class Ping(models.Model):
         for ping in pings.order_by("-id").only("created", "kind", "rid"):
             if ping.kind == "start" and ping.rid == self.rid:
                 return self.created - ping.created
-            elif ping.kind in (None, "", "fail") and ping.rid == self.rid:
+            elif ping.kind in (None, "fail") and ping.rid == self.rid:
                 return None
 
         return None
@@ -777,6 +826,57 @@ class Ping(models.Model):
         # xa0 is non-breaking spaces, we want regular spaces
         created_str = naturaltime(self.created).replace("\xa0", " ")
         return f"{self.get_kind_display()}, {created_str}"
+
+
+def prepare_durations(pings: Sequence[Ping]) -> None:
+    """Given a list of Ping objects, calculate the duration value for each.
+
+    The list *must* be already sorted in a descending order (latest pings first).
+    This function is an optimization: calling Ping.duration() on many Ping objects
+    would be expensive. Since we've already fetched a list of pings, for some of them
+    we can calculate durations more efficiently, without causing additional
+    SQL queries.
+
+    This function is used both in hc.front.views and in hc.api.views.
+    """
+
+    if not pings:
+        return
+
+    starts: dict[uuid.UUID | None, datetime | None] = {}
+    num_misses = 0
+    earliest = pings[-1]
+    for ping in reversed(pings):
+        # Make sure we are iterating pings in ascending order
+        # (i.e., we were passed pings in a most-recent-first order)
+        assert ping.id >= earliest.id
+
+        if ping.kind == "start":
+            starts[ping.rid] = ping.created
+        elif ping.kind in (None, "fail"):
+            if ping.rid not in starts:
+                # We haven't seen a start, success or fail event for this rid.
+                if ping.created - earliest.created >= MAX_DURATION:
+                    # But the earliest event we *have* seen is more than MAX_DURATION
+                    # away so there's no point looking further in the past.
+                    ping.duration = None
+                else:
+                    # It is possible there is a start event further in the past.
+                    # Will need to fall back to Ping.duration().
+                    num_misses += 1
+            else:
+                ping.duration = None
+                start = starts[ping.rid]
+                if start and (ping.created - start) < MAX_DURATION:
+                    ping.duration = ping.created - start
+
+            starts[ping.rid] = None
+
+    # If we will need to fall back to Ping.duration() more than 10 times
+    # then disable duration display altogether:
+    if num_misses > 10:
+        for ping in pings:
+            ping.duration = None
 
 
 class WebhookSpec(BaseModel):
@@ -851,6 +951,13 @@ class ZulipConf(BaseModel):
             _, domain = self.bot_email.split("@")
             self.site = f"https://{domain}"
 
+    def formatted_to(self) -> str:
+        # If we are sending a direct message to a user specified by id,
+        # Zulip expects a list of integers (formatted as JSON), not a bare integer:
+        if self.mtype == "private" and self.to.isdigit():
+            return f"[{self.to}]"
+        return self.to
+
 
 class NtfyConf(BaseModel):
     topic: str
@@ -861,7 +968,15 @@ class NtfyConf(BaseModel):
 
     @property
     def priority_display(self) -> str:
-        return NTFY_PRIORITIES[self.priority]
+        parts = []
+        if self.priority in NTFY_PRIORITIES:
+            s = NTFY_PRIORITIES[self.priority]
+            parts.append(f"down: {s}")
+        if self.priority_up in NTFY_PRIORITIES:
+            s = NTFY_PRIORITIES[self.priority_up]
+            parts.append(f"up: {s}")
+
+        return ", ".join(parts)
 
 
 class TrelloConf(BaseModel):
@@ -880,6 +995,20 @@ class GitHubConf(BaseModel):
 class GotifyConf(BaseModel):
     url: str
     token: str
+    priority: int | None = Field(None, ge=0, le=9)
+    priority_up: int | None = Field(None, ge=0, le=9)
+
+    @property
+    def priority_display(self) -> str:
+        parts = []
+        if self.priority in GOTIFY_PRIORITIES:
+            s = GOTIFY_PRIORITIES[self.priority]
+            parts.append(f"down: {s}")
+        if self.priority_up in GOTIFY_PRIORITIES:
+            s = GOTIFY_PRIORITIES[self.priority_up]
+            parts.append(f"up: {s}")
+
+        return ", ".join(parts)
 
 
 class Channel(models.Model):
@@ -927,6 +1056,7 @@ class Channel(models.Model):
             "whatsapp",
             "ntfy",
             "group",
+            "gotify",
         )
 
     def assign_all_checks(self) -> None:
@@ -977,12 +1107,40 @@ class Channel(models.Model):
         }
         emails.signal_rate_limited(email, ctx)
 
+    def send_call_limit_notice(self, message: str) -> None:
+        profile = self.project.owner_profile
+        ctx: dict[str, Any] = {
+            "recipient": self.phone.value,
+            "owner_email": self.project.owner.email,
+            "limit": profile.call_limit,
+            "message": message,
+        }
+
+        emails.call_limit(self.project.team_emails(), ctx)
+
+    def send_sms_limit_notice(self, transport: str, message: str) -> None:
+        profile = self.project.owner_profile
+        ctx = {
+            "recipient": self.phone.value,
+            "owner_email": self.project.owner.email,
+            "transport": transport,
+            "limit": profile.sms_limit,
+            "message": message,
+        }
+        emails.sms_limit(self.project.team_emails(), ctx)
+
     @property
     def transport(self) -> transports.Transport:
         if self.kind not in TRANSPORTS:
             raise NotImplementedError(f"Unknown channel kind: {self.kind}")
 
-        _, cls = TRANSPORTS[self.kind]
+        label, cls = TRANSPORTS[self.kind]
+        # import transport classes on first use, and cache in TRANSPORTS
+        if isinstance(cls, str):
+            modulename, classname = cls.rsplit(".", maxsplit=1)
+            cls = getattr(import_module(modulename), classname)
+            TRANSPORTS[self.kind] = (label, cls)
+
         return cls(self)
 
     def notify(self, flip: Flip, is_test: bool = False) -> str:
@@ -999,7 +1157,10 @@ class Channel(models.Model):
 
         n.check_status = flip.new_status
         n.error = "Sending"
-        n.save()
+        try:
+            n.save()
+        except IntegrityError:
+            return "Channel or check does not exist any more"
 
         start, error, disabled = now(), "", self.disabled
         try:
@@ -1020,7 +1181,7 @@ class Channel(models.Model):
         return error
 
     def icon_path(self) -> str:
-        return f"img/integrations/{self.kind}.png"
+        return f"img/{self.kind}.png"
 
     @property
     def json(self) -> Any:
@@ -1152,11 +1313,6 @@ class Channel(models.Model):
         return GitHubConf.model_validate_json(self.value)
 
     @property
-    def linenotify_token(self) -> str:
-        assert self.kind == "linenotify"
-        return self.value
-
-    @property
     def gotify(self) -> GotifyConf:
         assert self.kind == "gotify"
         return GotifyConf.model_validate_json(self.value, strict=True)
@@ -1253,6 +1409,24 @@ class Flip(models.Model):
             return "received a failure signal"
         return None
 
+    @cached_property
+    def down_duration(self) -> td | None:
+        """For going-up flips, calculate the downtime duration."""
+
+        if not self.owner.id:
+            # The check is not saved yet. This is the case when sending a
+            # test notification.
+            return None
+
+        assert self.old_status == "down"
+
+        q = self.owner.flip_set.filter(created__lt=self.created).order_by("-created")
+        prev_flip = q.first()
+        if prev_flip and prev_flip.new_status == "down":
+            return self.created - prev_flip.created
+
+        return None
+
 
 class TokenBucket(models.Model):
     value = models.CharField(max_length=80, unique=True)
@@ -1314,7 +1488,7 @@ class TokenBucket(models.Model):
 
     @staticmethod
     def authorize_invite(user: User) -> bool:
-        value = "invite-%d" % user.id
+        value = f"invite-{user.id}"
 
         # 20 invites per day
         return TokenBucket.authorize(value, 20, 3600 * 24)
@@ -1342,7 +1516,7 @@ class TokenBucket(models.Model):
 
     @staticmethod
     def authorize_signal_verification(user: User) -> bool:
-        value = "signal-verify-%d" % user.id
+        value = f"signal-verify-{user.id}"
 
         # 50 signal recipient verifications per day
         return TokenBucket.authorize(value, 50, 3600 * 24)
@@ -1356,15 +1530,23 @@ class TokenBucket(models.Model):
         return TokenBucket.authorize(f"po-{hashed}", 6, 60)
 
     @staticmethod
+    def authorize_ntfy(server: str, topic: str) -> bool:
+        salted_encoded = f"{server}-{topic}-{settings.SECRET_KEY}".encode()
+        hashed = hashlib.sha1(salted_encoded).hexdigest()
+
+        # 6 messages for a single topic per minute:
+        return TokenBucket.authorize(f"ntfy-{hashed}", 6, 60)
+
+    @staticmethod
     def authorize_sudo_code(user: User) -> bool:
-        value = "sudo-%d" % user.id
+        value = f"sudo-{user.id}"
 
         # 10 sudo attempts per day
         return TokenBucket.authorize(value, 10, 3600 * 24)
 
     @staticmethod
     def authorize_totp_attempt(user: User) -> bool:
-        value = "totp-%d" % user.id
+        value = f"totp-{user.id}"
 
         # 96 attempts per user per 24 hours
         # (or, on average, one attempt per 15 minutes)
@@ -1372,7 +1554,7 @@ class TokenBucket(models.Model):
 
     @staticmethod
     def authorize_totp_code(user: User, code: str) -> bool:
-        value = "totpc-%d-%s" % (user.id, code)
+        value = f"totpc-{user.id}-{code}"
 
         # A code has a validity period of 3 * 30 = 90 seconds.
         # During that period, allow the code to only be used once,

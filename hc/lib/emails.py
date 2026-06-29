@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from email.message import EmailMessage
 from email.utils import make_msgid
 from smtplib import SMTPDataError, SMTPServerDisconnected
 from threading import Thread
@@ -39,9 +40,10 @@ class EmailThread(Thread):
 def make_message(
     name: str, to: str | list[str], ctx: dict[str, Any], headers: dict[str, str] = {}
 ) -> Message:
-    subject = render("emails/%s-subject.html" % name, ctx).strip()
-    body = render("emails/%s-body-text.html" % name, ctx)
-    html = render("emails/%s-body-html.html" % name, ctx)
+    subject = render(f"emails/{name}-subject.html", ctx).strip()
+    # xa0 is a non-breaking space, in text emails we want regular spaces
+    body = render(f"emails/{name}-body-text.html", ctx).replace("\xa0", " ")
+    html = render(f"emails/{name}-body-html.html", ctx)
 
     domain = settings.DEFAULT_FROM_EMAIL.split("@")[-1].strip(">")
     headers["Message-ID"] = make_msgid(domain=domain)
@@ -88,8 +90,16 @@ def transfer_request(to: str, ctx: dict[str, Any]) -> None:
     send(make_message("transfer-request", to, ctx))
 
 
-def alert(to: str, ctx: dict[str, Any], headers: dict[str, str]) -> None:
-    send(make_message("alert", to, ctx, headers=headers))
+def alert(
+    to: str,
+    ctx: dict[str, Any],
+    headers: dict[str, str],
+    attachment: EmailMessage | None = None,
+) -> None:
+    m = make_message("alert", to, ctx, headers=headers)
+    if attachment:
+        m.attach("last-ping.eml", attachment, "message/rfc822")
+    send(m, block=True)
 
 
 def verify_email(to: str, ctx: dict[str, Any]) -> None:
@@ -106,6 +116,11 @@ def nag(to: str, ctx: dict[str, Any], headers: dict[str, str]) -> None:
     send(m, block=True)
 
 
+def flapping_notice(to: str, ctx: dict[str, Any]) -> None:
+    m = make_message("flapping-notice", to, ctx)
+    send(m, block=True)
+
+
 def deletion_notice(to: str, ctx: dict[str, Any]) -> None:
     m = make_message("deletion-notice", to, ctx)
     send(m, block=True)
@@ -116,11 +131,11 @@ def deletion_scheduled(to: list[str], ctx: dict[str, Any]) -> None:
     send(m, block=True)
 
 
-def sms_limit(to: str, ctx: dict[str, Any]) -> None:
+def sms_limit(to: list[str], ctx: dict[str, Any]) -> None:
     send(make_message("sms-limit", to, ctx))
 
 
-def call_limit(to: str, ctx: dict[str, Any]) -> None:
+def call_limit(to: list[str], ctx: dict[str, Any]) -> None:
     send(make_message("phone-call-limit", to, ctx))
 
 

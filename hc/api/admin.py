@@ -22,12 +22,16 @@ from hc.lib.date import format_duration
 Lookups = Iterable[tuple[str, str]]
 
 
+class CheckAnnotations(TypedDict):
+    owner_email: str
+
+
 @admin.register(Check)
 class ChecksAdmin(ModelAdmin[Check]):
     class Media:
         css = {"all": ("css/admin/checks.css",)}
 
-    search_fields = ["name", "code", "project__owner__email"]
+    search_fields = ["id", "name", "slug", "code", "project__owner__email"]
     readonly_fields = ("code", "badge_key")
     raw_id_fields = ("project",)
     list_select_related = ("project",)
@@ -46,13 +50,15 @@ class ChecksAdmin(ModelAdmin[Check]):
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Check]:
         qs = super().get_queryset(request)
-        qs = qs.annotate(email=F("project__owner__email"))
+        qs = qs.annotate(owner_email=F("project__owner__email"))
         return qs
 
-    def project_(self, obj: Check) -> str:
+    def project_(self, obj: WithAnnotations[Check, CheckAnnotations]) -> str:
         url = obj.project.get_absolute_url()
         name = obj.project.name or "Default"
-        return format_html("""{} &rsaquo; <a href="{}">{}</a>""", obj.email, url, name)
+        return format_html(
+            """{} &rsaquo; <a href="{}">{}</a>""", obj.owner_email, url, name
+        )
 
     def name_tags(self, obj: Check) -> str:
         url = obj.details_url(full=False)
@@ -232,7 +238,7 @@ class ChannelsAdmin(ModelAdmin[Channel]):
         return reverse("hc-channels", args=[obj.project_code])
 
     def transport(self, obj: Channel) -> str:
-        tmpl = """<span class="ic-{}"></span> &nbsp; {}{}"""
+        tmpl = """<span class="ic">{}</span> &nbsp; {}{}"""
         note = ""
         if obj.kind == "email" and not obj.email_verified:
             note = " (not verified)"

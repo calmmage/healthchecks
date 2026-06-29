@@ -10,8 +10,8 @@ $(function () {
         $("#update-name-input").val(this.dataset.name);
         $("#update-slug-input").val(this.dataset.slug);
 
-        var tagsSelectize = document.getElementById("update-tags-input").selectize;
-        tagsSelectize.setValue(this.dataset.tags.split(" "));
+        var tagsTs = document.getElementById("update-tags-input").tomselect;
+        tagsTs.setValue(this.dataset.tags.split(" "));
 
         $("#update-desc-input").val(this.dataset.desc);
         $("#update-name-modal").modal("show");
@@ -64,9 +64,20 @@ $(function () {
         return false;
     });
 
+    var profileTz = $("#checks-table").data("profile-tz");
+    var dateFormatter = new DateFormatter(profileTz);
     $(".last-ping").tooltip({
-        selector: ".label-confirmation",
-        title: 'The word "confirm" was found in request body',
+        delay: 200,
+        title: function () {
+            if (this.querySelector(".label-confirmation")) {
+                return 'The word "confirm" was found in request body';
+            }
+            var dtSpan = this.querySelector("[data-dt]");
+            if (dtSpan) {
+                var dt = new Date(dtSpan.dataset.dt * 1000);
+                return dateFormatter.formatTimestamp(dt);
+            }
+        },
     });
 
     $("#my-checks-tags .btn").tooltip({
@@ -195,13 +206,29 @@ $(function () {
     $("#to-slug").click((e) => switchUrlFormat("slug"));
 
     $(".pause").tooltip({
-        title: "Pause this check?<br />Click again to confirm.",
+        title: function() {
+            var code = $(this).closest("tr.checks-row").attr("id");
+            var alreadyPaused = $("#" + code + " span.status").hasClass("ic-paused");
+            if (alreadyPaused) {
+                return "This check is already paused.";
+            }
+
+            return "Pause this check?<br />Click again to confirm.";
+        },
         trigger: "manual",
         html: true,
     });
 
     $(".pause").click(function () {
         var btn = $(this);
+        var code = btn.closest("tr.checks-row").attr("id");
+
+        // A click on an already paused check
+        var alreadyPaused = $("#" + code + " span.status").hasClass("ic-paused");
+        if (alreadyPaused) {
+            btn.tooltip("show");
+            return false;
+        }
 
         // First click: show a confirmation tooltip
         if (!btn.hasClass("confirm")) {
@@ -211,7 +238,6 @@ $(function () {
 
         // Second click: update UI and pause the check
         btn.removeClass("confirm").tooltip("hide");
-        var code = btn.closest("tr.checks-row").attr("id");
         $("#" + code + " span.status").attr("class", "status ic-paused");
 
         var url = base + "/checks/" + code + "/pause/";
@@ -237,7 +263,7 @@ $(function () {
             if (cssClasses.indexOf("ic-new") > -1)
                 return "New. Has never received a ping.";
             if (cssClasses.indexOf("ic-paused") > -1)
-                return "Monitoring paused. Ping to resume.";
+                return "Monitoring paused.<br />Ping to resume.";
 
             if (cssClasses.indexOf("sort-name") > -1)
                 return "Sort by name<br />(but failed always first)";
@@ -315,21 +341,23 @@ $(function () {
         adaptiveSetInterval(refreshStatus);
     }
 
-    // Configure Selectize for entering tags
+    // Configure TomSelect for entering tags
     function divToOption() {
         return { value: this.textContent };
     }
 
-    $("#update-tags-input").selectize({
+    new TomSelect("#update-tags-input", {
         create: true,
         createOnBlur: true,
-        selectOnTab: false,
         delimiter: " ",
-        labelField: "value",
-        searchField: ["value"],
+        diacritics: false,
         hideSelected: true,
         highlight: false,
+        labelField: "value",
         options: $("#my-checks-tags div").map(divToOption).get(),
+        refreshThrottle: 0,
+        render: {no_results: (data, escape) => ""},
+        searchField: ["value"],
     });
 
     $(".my-checks-url").tooltip({ container: "body", title: "Click to copy" });

@@ -4,7 +4,6 @@ import uuid
 from datetime import timedelta as td
 
 from django.utils.timezone import now
-
 from hc.api.models import Channel, Check
 from hc.lib.typealias import JSONDict
 from hc.test import BaseTestCase, TestHttpResponse
@@ -40,6 +39,8 @@ class UpdateCheckTestCase(BaseTestCase):
                 "desc": "My description",
                 "timeout": 3600,
                 "grace": 60,
+                "filter_http_body": True,
+                "filter_default_fail": True,
             },
         )
 
@@ -64,13 +65,15 @@ class UpdateCheckTestCase(BaseTestCase):
         self.assertEqual(self.check.tags, "bar,baz")
         self.assertEqual(self.check.timeout.total_seconds(), 3600)
         self.assertEqual(self.check.grace.total_seconds(), 60)
+        self.assertTrue(self.check.filter_http_body)
+        self.assertTrue(self.check.filter_default_fail)
 
         # alert_after should be updated too
         expected_aa = self.check.last_ping + td(seconds=3600 + 60)
         self.assertEqual(self.check.alert_after, expected_aa)
 
     def test_it_handles_options(self) -> None:
-        r = self.client.options("/api/v1/checks/%s" % self.check.code)
+        r = self.client.options(f"/api/v1/checks/{self.check.code}")
         self.assertEqual(r.status_code, 204)
         self.assertIn("POST", r["Access-Control-Allow-Methods"])
 
@@ -168,7 +171,7 @@ class UpdateCheckTestCase(BaseTestCase):
     def test_it_handles_comma_separated_channel_codes(self) -> None:
         c1 = Channel.objects.create(project=self.project)
         c2 = Channel.objects.create(project=self.project)
-        r = self.post(self.check.code, {"channels": "%s,%s" % (c1.code, c2.code)})
+        r = self.post(self.check.code, {"channels": f"{c1.code},{c2.code}"})
         self.assertEqual(r.status_code, 200)
 
         self.check.refresh_from_db()

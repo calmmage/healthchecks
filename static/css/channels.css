@@ -2,11 +2,6 @@
     margin-top: 36px;
 }
 
-.channel-row.kind-linenotify {
-    filter: grayscale(100%);
-    opacity: 0.5;
-}
-
 .channels-table .channel-row > td {
     padding-top: 10px;
     padding-bottom: 10px;
@@ -247,7 +242,7 @@ body.dark img.kind-matrix {
 }
 
 body.dark img.kind-github {
-    content: url("../img/integrations/github-white.png");
+    content: url("../img/github-white.png");
 }
 
 img.kind-ntfy {

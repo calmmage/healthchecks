@@ -1,8 +1,12 @@
-{% load hc_extras humanize linemode %}{% linemode %}
+{% load hc_extras humanize linemode tz %}{% linemode %}
+{% timezone tz %}
 
 {% line %}The check "{{ check.name_then_code|safe }}" has gone {{ flip.new_status }}.{% endline %}
 {% if flip.reason %}
 {% line %}Reason: {{ flip.reason_long}}.{% endline %}
+{% endif %}
+{% if flip.new_status == "up" and flip.down_duration %}
+{% line %}The downtime lasted {{ flip.down_duration|hc_duration_for_sentence }}.{% endline %}
 {% endif %}
 {% line %}{% endline %}
 
@@ -48,20 +52,22 @@
     {% endif %}
 {% endif %}
 
-{% line %}Status changed to {{ flip.new_status }} at: {{ flip.created|date:"Y-m-d H:i:s T" }}{% endline %}
+{% line %}Status changed to {{ flip.new_status }} at: {{ flip.created|date:"r" }}{% endline %}
 
 {% if ping and ping.has_body %}
     {% line %}{% endline %}
     {% line %}Last Ping Body:{% endline %}
+    {% if body|length > 10000 and not ping_attached %}
+        {% line %}Showing the last 10000 bytes of {{ body|length}} bytes total.{% endline %}
+    {% endif %}
     {% line %}---------------{% endline %}
     {% if body is None %}
         {% line %}The request body data is being processed and will be available for viewing shortly.{% endline %}
         {% line %}Please view it on the website.{% endline %}
+    {% elif ping_attached %}
+        {% line %}See the attachment.{% endline %}
     {% else %}
-        {% line %}{{ body|safe|slice:":10000"|wordwrap:80 }}{% endline %}
-        {% if body|length > 10000 %}
-            {% line %}[truncated]{% endline %}
-        {% endif %}
+        {% line %}{{ body|safe|slice:"-10000:"|wordwrap:80 }}{% endline %}
     {% endif %}
 {% endif %}
 
@@ -86,4 +92,6 @@
 {% line %}--{% endline %}
 {% line %}Unsubscribe: {{ unsub_link }}{% endline %}
 {% line %}Regards, {% site_name %}{% endline %}
+
+{% endtimezone %}
 {% endlinemode %}

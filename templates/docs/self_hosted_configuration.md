@@ -12,6 +12,7 @@ from environment variables. Below is a list of environment variables it reads an
 <li><a href="#DB_HOST">DB_HOST</a></li>
 <li><a href="#DB_NAME">DB_NAME</a></li>
 <li><a href="#DB_PASSWORD">DB_PASSWORD</a></li>
+<li><a href="#DB_PASSWORD_FILE">DB_PASSWORD_FILE</a></li>
 <li><a href="#DB_PORT">DB_PORT</a></li>
 <li><a href="#DB_SSLMODE">DB_SSLMODE</a></li>
 <li><a href="#DB_TARGET_SESSION_ATTRS">DB_TARGET_SESSION_ATTRS</a></li>
@@ -20,23 +21,32 @@ from environment variables. Below is a list of environment variables it reads an
 <li><a href="#DEFAULT_FROM_EMAIL">DEFAULT_FROM_EMAIL</a></li>
 <li><a href="#DISCORD_CLIENT_ID">DISCORD_CLIENT_ID</a></li>
 <li><a href="#DISCORD_CLIENT_SECRET">DISCORD_CLIENT_SECRET</a></li>
+<li><a href="#DISCORD_CLIENT_SECRET_FILE">DISCORD_CLIENT_SECRET_FILE</a></li>
 <li><a href="#EMAIL_HOST">EMAIL_HOST</a></li>
 <li><a href="#EMAIL_HOST_PASSWORD">EMAIL_HOST_PASSWORD</a></li>
+<li><a href="#EMAIL_HOST_PASSWORD_FILE">EMAIL_HOST_PASSWORD_FILE</a></li>
 <li><a href="#EMAIL_HOST_USER">EMAIL_HOST_USER</a></li>
 <li><a href="#EMAIL_PORT">EMAIL_PORT</a></li>
 <li><a href="#EMAIL_USE_TLS">EMAIL_USE_TLS</a></li>
 <li><a href="#EMAIL_USE_SSL">EMAIL_USE_SSL</a></li>
 <li><a href="#EMAIL_USE_VERIFICATION">EMAIL_USE_VERIFICATION</a></li>
+<li><a href="#GITHUB_CLIENT_ID">GITHUB_CLIENT_ID</a></li>
+<li><a href="#GITHUB_CLIENT_SECRET">GITHUB_CLIENT_SECRET</a></li>
+<li><a href="#GITHUB_CLIENT_SECRET_FILE">GITHUB_CLIENT_SECRET_FILE</a></li>
+<li><a href="#GITHUB_PRIVATE_KEY">GITHUB_PRIVATE_KEY</a></li>
+<li><a href="#GITHUB_PRIVATE_KEY_FILE">GITHUB_PRIVATE_KEY_FILE</a></li>
+<li><a href="#GITHUB_PUBLIC_LINK">GITHUB_PUBLIC_LINK</a></li>
 <li><a href="#http_proxy">http_proxy and https_proxy</a></li>
 <li><a href="#INTEGRATIONS_ALLOW_PRIVATE_IPS">INTEGRATIONS_ALLOW_PRIVATE_IPS</a></li>
-<li><a href="#LINENOTIFY_CLIENT_ID">LINENOTIFY_CLIENT_ID</a></li>
-<li><a href="#LINENOTIFY_CLIENT_SECRET">LINENOTIFY_CLIENT_SECRET</a></li>
 <li><a href="#MASTER_BADGE_URL">MASTER_BADGE_LABEL</a></li>
 <li><a href="#MATRIX_ACCESS_TOKEN">MATRIX_ACCESS_TOKEN</a></li>
+<li><a href="#MATRIX_ACCESS_TOKEN_FILE">MATRIX_ACCESS_TOKEN_FILE</a></li>
 <li><a href="#MATRIX_HOMESERVER">MATRIX_HOMESERVER</a></li>
 <li><a href="#MATRIX_USER_ID">MATRIX_USER_ID</a></li>
 <li><a href="#MATTERMOST_ENABLED">MATTERMOST_ENABLED</a></li>
 <li><a href="#MSTEAMS_ENABLED">MSTEAMS_ENABLED</a></li>
+<li><a href="#NTFY_SH_TOKEN">NTFY_SH_TOKEN</a></li>
+<li><a href="#NTFY_SH_TOKEN_FILE">NTFY_SH_TOKEN_FILE</a></li>
 <li><a href="#OPSGENIE_ENABLED">OPSGENIE_ENABLED</a></li>
 <li><a href="#PAGERTREE_ENABLED">PAGERTREE_ENABLED</a></li>
 <li><a href="#PD_APP_ID">PD_APP_ID</a></li>
@@ -47,7 +57,9 @@ from environment variables. Below is a list of environment variables it reads an
 <li><a href="#PROMETHEUS_ENABLED">PROMETHEUS_ENABLED</a></li>
 <li><a href="#PUSHBULLET_CLIENT_ID">PUSHBULLET_CLIENT_ID</a></li>
 <li><a href="#PUSHBULLET_CLIENT_SECRET">PUSHBULLET_CLIENT_SECRET</a></li>
+<li><a href="#PUSHBULLET_CLIENT_SECRET_FILE">PUSHBULLET_CLIENT_SECRET_FILE</a></li>
 <li><a href="#PUSHOVER_API_TOKEN">PUSHOVER_API_TOKEN</a></li>
+<li><a href="#PUSHOVER_API_TOKEN_FILE">PUSHOVER_API_TOKEN_FILE</a></li>
 <li><a href="#PUSHOVER_EMERGENCY_EXPIRATION">PUSHOVER_EMERGENCY_EXPIRATION</a></li>
 <li><a href="#PUSHOVER_EMERGENCY_RETRY_DELAY">PUSHOVER_EMERGENCY_RETRY_DELAY</a></li>
 <li><a href="#PUSHOVER_SUBSCRIPTION_URL">PUSHOVER_SUBSCRIPTION_URL</a></li>
@@ -60,9 +72,11 @@ from environment variables. Below is a list of environment variables it reads an
 <li><a href="#S3_ENDPOINT">S3_ENDPOINT</a></li>
 <li><a href="#S3_REGION">S3_REGION</a></li>
 <li><a href="#S3_SECRET_KEY">S3_SECRET_KEY</a></li>
+<li><a href="#S3_SECRET_KEY_FILE">S3_SECRET_KEY_FILE</a></li>
 <li><a href="#S3_TIMEOUT">S3_TIMEOUT</a></li>
 <li><a href="#S3_SECURE">S3_SECURE</a></li>
 <li><a href="#SECRET_KEY">SECRET_KEY</a></li>
+<li><a href="#SECRET_KEY_FILE">SECRET_KEY_FILE</a></li>
 <li><a href="#SECURE_PROXY_SSL_HEADER">SECURE_PROXY_SSL_HEADER</a></li>
 <li><a href="#SHELL_ENABLED">SHELL_ENABLED</a></li>
 <li><a href="#SIGNAL_CLI_SOCKET">SIGNAL_CLI_SOCKET</a></li>
@@ -71,13 +85,17 @@ from environment variables. Below is a list of environment variables it reads an
 <li><a href="#SITE_ROOT">SITE_ROOT</a></li>
 <li><a href="#SLACK_CLIENT_ID">SLACK_CLIENT_ID</a></li>
 <li><a href="#SLACK_CLIENT_SECRET">SLACK_CLIENT_SECRET</a></li>
+<li><a href="#SLACK_CLIENT_SECRET_FILE">SLACK_CLIENT_SECRET_FILE</a></li>
 <li><a href="#SLACK_ENABLED">SLACK_ENABLED</a></li>
 <li><a href="#SPIKE_ENABLED">SPIKE_ENABLED</a></li>
 <li><a href="#TELEGRAM_BOT_NAME">TELEGRAM_BOT_NAME</a></li>
 <li><a href="#TELEGRAM_TOKEN">TELEGRAM_TOKEN</a></li>
+<li><a href="#TELEGRAM_TOKEN_FILE">TELEGRAM_TOKEN_FILE</a></li>
 <li><a href="#TRELLO_APP_KEY">TRELLO_APP_KEY</a></li>
+<li><a href="#TRELLO_APP_KEY_FILE">TRELLO_APP_KEY_FILE</a></li>
 <li><a href="#TWILIO_ACCOUNT">TWILIO_ACCOUNT</a></li>
 <li><a href="#TWILIO_AUTH">TWILIO_AUTH</a></li>
+<li><a href="#TWILIO_AUTH_FILE">TWILIO_AUTH_FILE</a></li>
 <li><a href="#TWILIO_FROM">TWILIO_FROM</a></li>
 <li><a href="#TWILIO_MESSAGING_SERVICE_SID">TWILIO_MESSAGING_SERVICE_SID</a></li>
 <li><a href="#TWILIO_USE_WHATSAPP">TWILIO_USE_WHATSAPP</a></li>
@@ -170,6 +188,15 @@ Default: `""` (empty string)
 This is a standard Django setting, read more in
 [Django documentation](https://docs.djangoproject.com/en/5.1/ref/settings/#password).
 
+## `DB_PASSWORD_FILE` {: #DB_PASSWORD_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [DB_PASSWORD](#DB_PASSWORD) setting.
+If `DB_PASSWORD` and `DB_PASSWORD_FILE` are both set, `DB_PASSWORD_FILE` takes
+precedence.
+
 ## `DB_PORT` {: #DB_PORT }
 
 Default: `""` (empty string)
@@ -239,6 +266,15 @@ Default: `None`
 The Discord Client Secret, required by the Discord integration. Look it up at
 [https://discordapp.com/developers/applications/me](https://discordapp.com/developers/applications/me).
 
+## `DISCORD_CLIENT_SECRET_FILE` {: #DISCORD_CLIENT_SECRET_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [DISCORD_CLIENT_SECRET](#DISCORD_CLIENT_SECRET)
+setting. If `DISCORD_CLIENT_SECRET` and `DISCORD_CLIENT_SECRET_FILE` are both set,
+`DISCORD_CLIENT_SECRET_FILE` takes precedence.
+
 ## `EMAIL_HOST` {: #EMAIL_HOST }
 
 Default: `""` (empty string)
@@ -252,6 +288,15 @@ Default: `""` (empty string)
 
 This is a standard Django setting, read more in
 [Django documentation](https://docs.djangoproject.com/en/5.1/ref/settings/#email-host-password).
+
+## `EMAIL_HOST_PASSWORD_FILE` {: #EMAIL_HOST_PASSWORD_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [EMAIL_HOST_PASSWORD](#EMAIL_HOST_PASSWORD)
+setting. If `EMAIL_HOST_PASSWORD` and `EMAIL_HOST_PASSWORD_FILE`
+are both set, `EMAIL_HOST_PASSWORD_FILE` takes precedence.
 
 ## `EMAIL_HOST_USER` {: #EMAIL_HOST_USER }
 
@@ -295,6 +340,68 @@ If you are setting up a private healthchecks instance where
 you trust your users, you can opt to disable the verification step. In that case,
 set `EMAIL_USE_VERIFICATION` to `False`.
 
+## `GITHUB_CLIENT_ID` {: #GITHUB_CLIENT_ID }
+
+Default: `None`
+
+The GitHub Client ID, required by the GitHub Issues integration.
+
+To set up the GitHub Issues integration:
+
+* [Register a new GitHub App](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
+  (not OAuth app).
+* In GitHub App settings, under **General › About**, look up the **Client ID** and **Public link** values and put
+  them in the Healthchecks `GITHUB_CLIENT_ID` and `GITHUB_PUBLIC_LINK` environment
+  variables respectively.
+* Under **General › Client secrets**, generate a client secret, and put it in the
+  Healthchecks `GITHUB_CLIENT_SECRET` environment variable.
+* Under **General › Identifying and authorizing users**, set the **Callback URL**.
+  The URL format is `SITE_ROOT/integrations/add_github/`.
+  For example, if `your SITE_ROOT` is `https://my-hc.example.org` then the
+  Callback URL would be `https://my-hc.example.org/integrations/add_github/`.
+* Under **General › Post installation**, set **Setup URL** to the same value.
+* Under **General › Private keys**, generate a private key and put it in the
+  Healthchecks `GITHUB_PRIVATE_KEY` environment variable.
+* Under **Permissions & events › Repository permissions**, set access for permission
+  "Issues" to "Read and write".
+
+## `GITHUB_CLIENT_SECRET` {: #GITHUB_CLIENT_SECRET }
+
+Default: `None`
+
+The GitHub App's Client Secret, required by the GitHub Issues integration.
+
+## `GITHUB_CLIENT_SECRET_FILE` {: #GITHUB_CLIENT_SECRET_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [GITHUB_CLIENT_SECRET](#GITHUB_CLIENT_SECRET)
+setting. If `GITHUB_CLIENT_SECRET` and `GITHUB_CLIENT_SECRET_FILE` are both set,
+`GITHUB_CLIENT_SECRET_FILE` takes precedence.
+
+## `GITHUB_PRIVATE_KEY` {: #GITHUB_PRIVATE_KEY }
+
+Default: `None`
+
+The GitHub App's private key, required by the GitHub Issues integration.
+
+## `GITHUB_PRIVATE_KEY_FILE` {: #GITHUB_PRIVATE_KEY_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [GITHUB_PRIVATE_KEY](#GITHUB_PRIVATE_KEY)
+setting. If `GITHUB_PRIVATE_KEY` and `GITHUB_PRIVATE_KEY_FILE` are both set,
+`GITHUB_PRIVATE_KEY_FILE` takes precedence.
+
+## `GITHUB_PUBLIC_LINK` {: #GITHUB_PUBLIC_LINK }
+
+Default: `None`
+
+A URL pointing to the  GitHub App's public page on the GitHub website, required by
+the GitHub Issues integration.
+
 ## `http_proxy` and `https_proxy` {: #http_proxy}
 
 Default: `""` (empty string)
@@ -328,8 +435,8 @@ internal addresses is a security risk.
 Only enable this setting if you run your Healthchecks instance in a trusted
 environment, and need to integrate with services running in your internal network.
 
-This setting affects all integration types, not just webhooks. For example,
-if you run a Gotify instance on `localhost`, you will need to enable
+This setting affects all integration types except Apprise, not just webhooks. For
+example, if you run a Gotify instance on `localhost`, you will need to enable
 `INTEGRATIONS_ALLOW_PRIVATE_IPS` to be able to use it via the Gotify integration.
 
 This setting affects all outbound HTTP requests, including those made
@@ -339,13 +446,9 @@ This setting also affects connections to the proxy server when the `http_proxy` 
 `https_proxy` environment variables are set. If your proxy server has a private
 IP address, you will need to enable `INTEGRATIONS_ALLOW_PRIVATE_IPS` to use it.
 
-## `LINENOTIFY_CLIENT_ID` {: #LINENOTIFY_CLIENT_ID }
-
-Default: `None`
-
-## `LINENOTIFY_CLIENT_SECRET` {: #LINENOTIFY_CLIENT_SECRET }
-
-Default: `None`
+This setting *does not* have effect on the Apprise integration, as the Apprise library
+uses its own HTTP client. Apprise can make requests to private IPs regardless
+of this setting.
 
 ## `MASTER_BADGE_LABEL` {: #MASTER_BADGE_URL }
 
@@ -374,6 +477,15 @@ MATRIX_HOMESERVER=https://matrix.org
 MATRIX_USER_ID=@mychecks:matrix.org
 ```
 
+## `MATRIX_ACCESS_TOKEN_FILE` {: #MATRIX_ACCESS_TOKEN_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [MATRIX_ACCESS_TOKEN](#MATRIX_ACCESS_TOKEN)
+setting. If `MATRIX_ACCESS_TOKEN` and `MATRIX_ACCESS_TOKEN_FILE` are both set,
+`MATRIX_ACCESS_TOKEN_FILE` takes precedence.
+
 ## `MATRIX_HOMESERVER` {: #MATRIX_HOMESERVER }
 
 Default: `None`
@@ -396,7 +508,30 @@ A boolean that turns on/off the Mattermost integration. Enabled by default.
 
 Default: `True`
 
-A boolean that turns on/off the MS Teams integration. Enabled by default.
+A boolean that turns on/off the MS Teams integration. Enabled
+
+## `NTFY_SH_TOKEN` {: #NTFY_SH_TOKEN }
+
+Default: `None`
+
+The default access token to use when sending ntfy notifications to the hosted ntfy.sh
+server. This token will be only used when sending to the ntfy server at
+`https://ntfy.sh` and when the user has not specified their own access token
+when setting up the ntfy integration.
+
+Use this setting if your Healthchecks instance is hitting ntfy.sh free plan's
+[daily sending limit](https://docs.ntfy.sh/publish/#limitations) and you want to ensure
+reliable notification delivery for ntfy integrations that do not bring their own
+access token.
+
+## `NTFY_SH_TOKEN_FILE` {: #NTFY_SH_TOKEN_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [NTFY_SH_TOKEN](#NTFY_SH_TOKEN) setting.
+If `NTFY_SH_TOKEN` and `NTFY_SH_TOKEN_FILE` are both set, `NTFY_SH_TOKEN_FILE` takes
+precedence.
 
 ## `OPSGENIE_ENABLED` {: #OPSGENIE_ENABLED }
 
@@ -529,6 +664,16 @@ Default: `None`
 The Pushbullet Client Secret, required by the Pushbullet integration. Look it up at
 [https://www.pushbullet.com/#settings/clients](https://www.pushbullet.com/#settings/clients).
 
+## `PUSHBULLET_CLIENT_SECRET_FILE` {: #PUSHBULLET_CLIENT_SECRET_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the
+[PUSHBULLET_CLIENT_SECRET](#PUSHBULLET_CLIENT_SECRET) setting. If
+`PUSHBULLET_CLIENT_SECRET` and `PUSHBULLET_CLIENT_SECRET_FILE` are both set,
+`PUSHBULLET_CLIENT_SECRET_FILE` takes precedence.
+
 ## `PUSHOVER_API_TOKEN` {: #PUSHOVER_API_TOKEN }
 
 Default: `None`
@@ -547,6 +692,15 @@ To enable the Pushover integration:
   `PUSHOVER_API_TOKEN` and `PUSHOVER_SUBSCRIPTION_URL` environment
   variables. The Pushover subscription URL should look similar to
   `https://pushover.net/subscribe/yourAppName-randomAlphaNumericData`.
+
+## `PUSHOVER_API_TOKEN_FILE` {: #PUSHOVER_API_TOKEN_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [PUSHOVER_API_TOKEN](#PUSHOVER_API_TOKEN)
+setting. If `PUSHOVER_API_TOKEN` and `PUSHOVER_API_TOKEN_FILE` are both set,
+`PUSHOVER_API_TOKEN_FILE` takes precedence.
 
 ## `PUSHOVER_EMERGENCY_EXPIRATION` {: #PUSHOVER_EMERGENCY_EXPIRATION }
 
@@ -689,6 +843,15 @@ Default: `None`
 
 The secret key of an account in S3 service.
 
+## `S3_SECRET_KEY_FILE` {: #S3_SECRET_KEY_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [S3_SECRET_KEY](#S3_SECRET_KEY) setting.
+If `S3_SECRET_KEY` and `S3_SECRET_KEY_FILE` are both set, `S3_SECRET_KEY_FILE` takes
+precedence.
+
 ## `S3_TIMEOUT` {: #S3_TIMEOUT }
 
 Default: `60`
@@ -711,6 +874,15 @@ unpredictable value.
 
 This is a standard Django setting, read more in
 [Django documentation](https://docs.djangoproject.com/en/5.1/ref/settings/#secret-key).
+
+## `SECRET_KEY_FILE` {: #SECRET_KEY_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [SECRET_KEY](#SECRET_KEY) setting.
+If `SECRET_KEY` and `SECRET_KEY_FILE` are both set, `SECRET_KEY_FILE` takes
+precedence.
 
 ## `SECURE_PROXY_SSL_HEADER` {: #SECURE_PROXY_SSL_HEADER }
 
@@ -902,6 +1074,15 @@ Default: `None`
 The Slack Client Secret. Required if `SLACK_CLIENT_ID` is set.
 Look it up at [https://api.slack.com/apps/](https://api.slack.com/apps/).
 
+## `SLACK_CLIENT_SECRET_FILE` {: #SLACK_CLIENT_SECRET_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [SLACK_CLIENT_SECRET](#SLACK_CLIENT_SECRET)
+setting. If `SLACK_CLIENT_SECRET` and `SLACK_CLIENT_SECRET_FILE` are both set,
+`SLACK_CLIENT_SECRET_FILE` takes precedence.
+
 ## `SLACK_ENABLED` {: #SLACK_ENABLED }
 
 Default: `True`
@@ -945,6 +1126,15 @@ Default: `None`
 
 The Telegram bot user's authentication token, required by the Telegram integration.
 
+## `TELEGRAM_TOKEN_FILE` {: #TELEGRAM_TOKEN_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [TELEGRAM_TOKEN](#TELEGRAM_TOKEN) setting.
+If `TELEGRAM_TOKEN` and `TELEGRAM_TOKEN_FILE` are both set, `TELEGRAM_TOKEN_FILE` takes
+precedence.
+
 ## `TRELLO_APP_KEY` {: #TRELLO_APP_KEY }
 
 Default: `None`
@@ -954,6 +1144,15 @@ The [Trello](https://trello.com/) app key, required by the Trello integration.
 To set up the Trello integration, get a developer API key from
 [https://trello.com/app-key](https://trello.com/app-key) and put it in the
 `TRELLO_APP_KEY` environment variable.
+
+## `TRELLO_APP_KEY_FILE` {: #TRELLO_APP_KEY_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [TRELLO_APP_KEY](#TRELLO_APP_KEY) setting.
+If `TRELLO_APP_KEY` and `TRELLO_APP_KEY_FILE` are both set, `TRELLO_APP_KEY_FILE` takes
+precedence.
 
 ## `TWILIO_ACCOUNT` {: #TWILIO_ACCOUNT }
 
@@ -966,6 +1165,15 @@ Twilio Account SID, required by the SMS, Call, and WhatsApp integrations.
 Default: `None`
 
 Twilio Auth token, required by the SMS, Call, and WhatsApp integrations.
+
+## `TWILIO_AUTH_FILE` {: #TWILIO_AUTH_FILE }
+
+Default: `None`
+
+If set, must contain a filesystem path pointing to a readable file. Healthchecks will
+read the contents of the file into the [TWILIO_AUTH](#TWILIO_AUTH) setting.
+If `TWILIO_AUTH` and `TWILIO_AUTH_FILE` are both set, `TWILIO_AUTH_FILE` takes
+precedence.
 
 ## `TWILIO_FROM` {: #TWILIO_FROM }
 

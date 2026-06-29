@@ -48,6 +48,13 @@ to a slug with no corresponding check, SITE_NAME will create the check automatic
 Auto-provisioning is off by default. To enable it, add a `create=1` query parameter
 to the ping URL.
 
+## Rate Limits
+
+Please be nice to our servers. Do not ping a check more frequently than is necessary.
+If you ping a check more than 5 times per minute, some of the requests may get rate
+limited and not recorded to the database. In extreme cases we will block the client's
+IP address.
+
 ## Endpoints
 
 Endpoint Name                                               | Endpoint Address
@@ -363,7 +370,8 @@ Signals to SITE_NAME that the job has been completed successfully (or
 a continuously running process is still running and healthy).
 
 SITE_NAME identifies the check by project's ping key and check's slug
-included in the URL.
+included in the URL. The slug should consist of lowercase ASCII letters (`a-z`),
+digits (`0-9`), underscores (`_`), and hyphens (`-`) only.
 
 The response may optionally contain a `Ping-Body-Limit: <n>` response header.
 If this header is present, its value is an integer, and it specifies how many
@@ -395,6 +403,9 @@ rid=&lt;uuid&gt;
 
 201 Created
 :   A new check was automatically created, the request succeeded.
+
+400 invalid url format
+:   The URL does not match the expected format.
 
 404 not found
 :   Could not find a check with the specified ping key and slug combination.
@@ -435,7 +446,8 @@ optional, but it enables a few extra features:
 * SITE_NAME will detect if the job runs longer than its configured grace time
 
 SITE_NAME identifies the check by project's ping key and check's slug
-included in the URL.
+included in the URL. The slug should consist of lowercase ASCII letters (`a-z`),
+digits (`0-9`), underscores (`_`), and hyphens (`-`) only.
 
 The response may optionally contain a `Ping-Body-Limit: <n>` response header.
 If this header is present, its value is an integer, and it specifies how many
@@ -467,6 +479,9 @@ rid=&lt;uuid&gt;
 
 201 Created
 :   A new check was automatically created, the request succeeded.
+
+400 invalid url format
+:   The URL does not match the expected format.
 
 404 not found
 :   Could not find a check with the specified ping key and slug combination.
@@ -504,7 +519,8 @@ Signals to SITE_NAME that the job has failed. Actively signaling a failure
 minimizes the delay from your monitored service failing to you receiving an alert.
 
 SITE_NAME identifies the check by project's ping key and check's slug
-included in the URL.
+included in the URL. The slug should consist of lowercase ASCII letters (`a-z`),
+digits (`0-9`), underscores (`_`), and hyphens (`-`) only.
 
 The response may optionally contain a `Ping-Body-Limit: <n>` response header.
 If this header is present, its value is an integer, and it specifies how many
@@ -536,6 +552,9 @@ rid=&lt;uuid&gt;
 
 201 Created
 :   A new check was automatically created, the request succeeded.
+
+400 invalid url format
+:   The URL does not match the expected format.
 
 404 not found
 :   Could not find a check with the specified ping key and slug combination.
@@ -574,7 +593,8 @@ SITE_NAME will log the event and display it in check's "Events" section with the
 "Log" label. The check's status will not change.
 
 SITE_NAME identifies the check by project's ping key and check's slug
-included in the URL.
+included in the URL. The slug should consist of lowercase ASCII letters (`a-z`),
+digits (`0-9`), underscores (`_`), and hyphens (`-`) only.
 
 The response may optionally contain a `Ping-Body-Limit: <n>` response header.
 If this header is present, its value is an integer, and it specifies how many
@@ -646,7 +666,8 @@ included in the URL. The exit status is a 0-255 integer. SITE_NAME
 interprets 0 as a success and all other values as a failure.
 
 SITE_NAME identifies the check by project's ping key and check's slug
-included in the URL.
+included in the URL. The slug should consist of lowercase ASCII letters (`a-z`),
+digits (`0-9`), underscores (`_`), and hyphens (`-`) only.
 
 The response may optionally contain a `Ping-Body-Limit: <n>` response header.
 If this header is present, its value is an integer, and it specifies how many

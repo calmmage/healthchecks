@@ -32,6 +32,7 @@ Please submit additions and corrections
 ### PowerShell
 
 * [davehope/HealthChecksIOStatusReport](https://github.com/davehope/HealthChecksIOStatusReport) – Supports pinging.
+* [ptmorris1/healthchecks-pwsh](https://github.com/ptmorris1/healthchecks-pwsh) – Supports pinging and all Management API calls.
 
 ### Python
 
@@ -58,3 +59,4 @@ Please submit additions and corrections
 
 * [healthchecks/dashboard](https://github.com/healthchecks/dashboard) – A standalone HTML page showing the status of the checks in your account.
 * [nicoandrade/healthchecks-front](https://github.com/nicoandrade/healthchecks-front) – Beautiful & free web dashboard, works great on desktop and mobile.
+* [KumaBar](https://apps.apple.com/ca/app/kumabar/id6746335356?mt=12) – MacOS menu bar app, supports Uptime Kuma and Healthchecks.io.

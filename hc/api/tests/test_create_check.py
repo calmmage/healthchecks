@@ -42,6 +42,8 @@ class CreateCheckTestCase(BaseTestCase):
                 "failure_kw": "FAILURE",
                 "filter_subject": True,
                 "filter_body": True,
+                "filter_http_body": True,
+                "filter_default_fail": True,
             }
         )
         self.assertEqual(r.status_code, 201)
@@ -61,6 +63,8 @@ class CreateCheckTestCase(BaseTestCase):
         self.assertEqual(doc["failure_kw"], "FAILURE")
         self.assertTrue(doc["filter_subject"])
         self.assertTrue(doc["filter_body"])
+        self.assertTrue(doc["filter_http_body"])
+        self.assertTrue(doc["filter_default_fail"])
 
         self.assertTrue("schedule" not in doc)
         self.assertTrue("tz" not in doc)
@@ -312,11 +316,12 @@ class CreateCheckTestCase(BaseTestCase):
         self.assertTrue("timeout" not in doc)
 
     def test_it_validates_cron_expression(self) -> None:
-        r = self.post(
-            {"schedule": "bad-expression", "tz": "Europe/Riga", "grace": 60},
-            expect_fragment="schedule is not a valid cron or OnCalendar expression",
-        )
-        self.assertEqual(r.status_code, 400)
+        for expr in ["bad-expression", "* * * * * *"]:
+            r = self.post(
+                {"schedule": expr, "tz": "Europe/Riga", "grace": 60},
+                expect_fragment="schedule is not a valid cron or OnCalendar expression",
+            )
+            self.assertEqual(r.status_code, 400)
 
     def test_it_rejects_long_cron_expression(self) -> None:
         s = "1," * 100 + "1 * * * *"
@@ -334,7 +339,11 @@ class CreateCheckTestCase(BaseTestCase):
         self.assertEqual(r.status_code, 400)
 
     def test_it_converts_legacy_timezone(self) -> None:
-        for old, new in [("Europe/Kiev", "Europe/Kyiv"), ("UCT", "Etc/UTC")]:
+        for old, new in [
+            ("Europe/Kiev", "Europe/Kyiv"),
+            ("UCT", "Etc/UTC"),
+            ("CET", "Europe/Brussels"),
+        ]:
             r = self.post({"schedule": "* * * * *", "tz": old, "grace": 60})
             self.assertEqual(r.status_code, 201)
 

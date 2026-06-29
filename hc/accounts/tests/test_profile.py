@@ -33,6 +33,13 @@ class ProfileTestCase(BaseTestCase):
         r = self.client.post("/accounts/profile/", form)
         self.assertEqual(r.status_code, 400)
 
+    def test_leaving_handles_invalid_uuid(self) -> None:
+        self.client.login(username="bob@example.org", password="password")
+
+        form = {"code": "surprise", "leave_project": "1"}
+        r = self.client.post("/accounts/profile/", form)
+        self.assertEqual(r.status_code, 400)
+
     def test_it_shows_project_membership(self) -> None:
         self.client.login(username="bob@example.org", password="password")
 
@@ -146,3 +153,20 @@ class ProfileTestCase(BaseTestCase):
         self.client.login(username="alice@example.org", password="password")
         r = self.client.get("/accounts/profile/")
         self.assertNotContains(r, "or register a Security Key to be used")
+
+    def test_it_saves_tz(self) -> None:
+        self.client.login(username="alice@example.org", password="password")
+
+        r = self.client.post("/accounts/profile/", {"tz": "Europe/Riga"})
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.tz, "Europe/Riga")
+        self.assertContains(r, "Time zone updated!")
+
+    def test_it_ignores_bad_tz(self) -> None:
+        self.client.login(username="alice@example.org", password="password")
+
+        self.client.post("/accounts/profile/", {"tz": "Foo/Bar"})
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.tz, "UTC")

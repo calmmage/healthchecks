@@ -227,24 +227,11 @@
                 <br />
 
                 {% if is_manager %}
-                {% if can_invite_new_users %}
                 <a
                     href="#"
                     class="btn btn-primary pull-right"
                     data-toggle="modal"
                     data-target="#invite-team-member-modal">Invite a Team Member</a>
-                {% else %}
-                <div class="alert alert-info">
-                    <strong>Team size limit reached.</strong>
-                    {% if is_owner %}
-                    To invite new members by email, please
-                    <a href="{% url 'hc-pricing' %}">upgrade your account!</a>
-                    {% else %}
-                    To invite new members, please ask project's owner
-                    to upgrade their account.
-                    {% endif %}
-                </div>
-                {% endif %}
                 {% endif %}
             </div>
             {% endwith %}
@@ -414,7 +401,6 @@
                     <div class="form-group">
                         <label for="itm-email" class="col-sm-3 control-label">Email</label>
                         <div class="col-sm-8">
-                            {% if can_invite_new_users %}
                             <input
                                 type="email"
                                 class="form-control"
@@ -422,10 +408,6 @@
                                 name="email"
                                 maxlength="254"
                                 placeholder="friend@example.org">
-                            {% else %}
-                            <p id="itm-email-display" class="form-control-static"></p>
-                            <input type="hidden" id="itm-email" name="email">
-                            {% endif %}
                         </div>
                     </div>
 
@@ -619,6 +601,30 @@
             <div class="modal-body">
                 <p>Copy the key and store it securely. The key will not be shown again:</p>
                 <input type="text" class="form-control" value="{{ new_key }}" readonly />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">OK, I copied the key</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if new_ping_key %}
+<div id="key-created-modal" class="modal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>Ping Key Created!</h4>
+            </div>
+            <div class="modal-body">
+                <p>Here is the new ping key.</p>
+                <p>
+                <strong>Tip:</strong> unlike API keys, you will be able to
+                look up the ping key later too. When {% site_name %} displays the ping
+                key in a masked form, you can <strong>click on it to reveal it</strong>.
+                </p>
+                <input type="text" class="form-control" value="{{ new_ping_key }}" readonly />
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-default" data-dismiss="modal">OK, I copied the key</button>

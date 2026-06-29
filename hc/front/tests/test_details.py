@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from datetime import timedelta as td
-from datetime import timezone
-from unittest.mock import Mock, patch
 
+import time_machine
 from django.test.utils import override_settings
+
 from hc.api.models import Check, Flip, Ping
 from hc.test import BaseTestCase
 
@@ -13,6 +13,10 @@ from hc.test import BaseTestCase
 class DetailsTestCase(BaseTestCase):
     def setUp(self) -> None:
         super().setUp()
+
+        self.profile.tz = "Europe/Riga"
+        self.profile.save()
+
         self.check = Check.objects.create(project=self.project, name="Foo")
 
         ping = Ping.objects.create(owner=self.check)
@@ -26,6 +30,10 @@ class DetailsTestCase(BaseTestCase):
 
     @override_settings(SITE_NAME="Mychecks")
     def test_it_works(self) -> None:
+        self.check.kind = "cron"
+        self.check.tz = "Europe/Berlin"
+        self.check.save()
+
         self.client.login(username="alice@example.org", password="password")
         r = self.client.get(self.url)
         self.assertContains(r, "How To Ping", status_code=200)
@@ -33,8 +41,13 @@ class DetailsTestCase(BaseTestCase):
         # The page should contain timezone strings
         self.assertContains(r, "Europe/Riga")
 
-        self.assertContains(r, "Foo – Mychecks", status_code=200)
+        self.assertContains(r, "Foo – Mychecks")
         self.assertContains(r, "favicon.svg")
+
+        # It should offer both the profile's tz and the check's tz
+        # in the timezone switcher:
+        self.assertContains(r, "Europe/Riga")
+        self.assertContains(r, "Europe/Berlin")
 
     def test_it_suggests_tags_from_other_checks(self) -> None:
         self.check.tags = "foo bar"
@@ -122,10 +135,8 @@ class DetailsTestCase(BaseTestCase):
         self.assertContains(r, "* * * * * /your/command.sh")
         self.assertContains(r, 'FIXME: replace "* * * * *"')
 
-    @patch("hc.lib.date.now")
-    def test_it_calculates_downtime_summary(self, mock_now: Mock) -> None:
-        mock_now.return_value = datetime(2020, 2, 1, tzinfo=timezone.utc)
-
+    @time_machine.travel("2020-02-01 00:00+00:00")
+    def test_it_calculates_downtime_summary(self) -> None:
         self.check.created = datetime(2019, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         self.check.save()
 
@@ -153,10 +164,8 @@ class DetailsTestCase(BaseTestCase):
         self.assertContains(r, "1 downtime, 1 h 0 min total")
         self.assertContains(r, "99.86% uptime")
 
-    @patch("hc.lib.date.now")
-    def test_it_downtime_summary_handles_plural(self, mock_now: Mock) -> None:
-        mock_now.return_value = datetime(2020, 2, 1, tzinfo=timezone.utc)
-
+    @time_machine.travel("2020-02-01 00:00+00:00")
+    def test_it_downtime_summary_handles_plural(self) -> None:
         self.check.created = datetime(2019, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         self.check.save()
 
@@ -180,10 +189,8 @@ class DetailsTestCase(BaseTestCase):
         self.assertContains(r, "1 downtime, 2 h 0 min total")
         self.assertContains(r, "99.73% uptime")
 
-    @patch("hc.lib.date.now")
-    def test_downtime_summary_handles_positive_utc_offset(self, mock_now: Mock) -> None:
-        mock_now.return_value = datetime(2020, 2, 1, tzinfo=timezone.utc)
-
+    @time_machine.travel("2020-02-01 00:00+00:00")
+    def test_downtime_summary_handles_positive_utc_offset(self) -> None:
         self.profile.tz = "America/New_York"
         self.profile.save()
 
@@ -198,10 +205,8 @@ class DetailsTestCase(BaseTestCase):
         self.assertContains(r, "Dec. 2019")
         self.assertContains(r, "Nov. 2019")
 
-    @patch("hc.lib.date.now")
-    def test_downtime_summary_handles_negative_utc_offset(self, mock_now: Mock) -> None:
-        mock_now.return_value = datetime(2020, 1, 31, 23, tzinfo=timezone.utc)
-
+    @time_machine.travel("2020-01-31 23:00:00+00:00")
+    def test_downtime_summary_handles_negative_utc_offset(self) -> None:
         self.profile.tz = "Europe/Riga"
         self.profile.save()
 
@@ -215,10 +220,8 @@ class DetailsTestCase(BaseTestCase):
         self.assertContains(r, "Jan. 2020")
         self.assertContains(r, "Dec. 2019")
 
-    @patch("hc.lib.date.now")
-    def test_it_handles_months_when_check_did_not_exist(self, mock_now: Mock) -> None:
-        mock_now.return_value = datetime(2020, 2, 1, tzinfo=timezone.utc)
-
+    @time_machine.travel("2020-02-01 00:00+00:00")
+    def test_it_handles_months_when_check_did_not_exist(self) -> None:
         self.check.created = datetime(2020, 1, 10, 0, 0, 0, tzinfo=timezone.utc)
         self.check.save()
 
@@ -236,15 +239,22 @@ class DetailsTestCase(BaseTestCase):
         self.project.ping_key = None
         self.project.save()
 
+        self.check.slug = "foo"
+        self.check.save()
+
         self.client.login(username="alice@example.org", password="password")
         r = self.client.get(self.url)
         self.assertContains(r, "Ping Key Required", status_code=200)
         self.assertNotContains(r, "ping-now")
+        self.assertContains(r, "The ping key is currently not set")
 
     def test_it_handles_no_ping_key_for_readonly_user(self) -> None:
         self.project.show_slugs = True
         self.project.ping_key = None
         self.project.save()
+
+        self.check.slug = "foo"
+        self.check.save()
 
         self.bobs_membership.role = "r"
         self.bobs_membership.save()
@@ -253,6 +263,7 @@ class DetailsTestCase(BaseTestCase):
         r = self.client.get(self.url)
         self.assertNotContains(r, "Ping Key Required", status_code=200)
         self.assertNotContains(r, "ping-now")
+        self.assertNotContains(r, "The ping key is currently not set")
 
     def test_it_handles_empty_slug(self) -> None:
         self.project.show_slugs = True
@@ -263,6 +274,7 @@ class DetailsTestCase(BaseTestCase):
         self.assertContains(r, "(unavailable, set slug first)", status_code=200)
         self.assertNotContains(r, "Copy URL")
         self.assertNotContains(r, "ping-now")
+        self.assertNotContains(r, "The ping key is currently not set")
 
     def test_it_saves_url_format_preference(self) -> None:
         self.client.login(username="alice@example.org", password="password")

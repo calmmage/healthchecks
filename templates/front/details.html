@@ -84,15 +84,23 @@
                     requests to this URL:
                 </p>
                 {% if check.url %}
-                <code>{{ check.url }}</code>
+                <code class="click-to-copy">{{ check.url }}</code>
                 {% else %}
                 <code>(unavailable, set slug first)</code>
                 {% endif %}
                 <p>Or by sending email to:</p>
                 {% if check.email %}
-                <code>{{ check.email }}</code>
+                <code class="click-to-copy">{{ check.email }}</code>
                 {% else %}
                 <code>(unavailable, set slug first)</code>
+                {% endif %}
+
+                {% if rw and project.show_slugs and not project.ping_key %}
+                <p class="alert alert-info">
+                    The ping key is currently not set. Go to
+                    <a href="{% url 'hc-project-settings' project.code %}">project settings</a>
+                    to generate it.
+                </p>
                 {% endif %}
 
                 <p>You can also explicitly
@@ -115,10 +123,6 @@
                     data-toggle="modal"
                     data-target="#show-usage-modal"
                     class="btn btn-sm btn-default">Usage Examples</button>
-                <button
-                    data-label="Copy URL"
-                    data-clipboard-text="{{ check.url }}"
-                    class="btn btn-sm btn-default copy-btn">Copy URL</button>
                 {% endif %}
             </div>
         </div>
@@ -234,7 +238,7 @@
                             </span>
                         </th>
                         <td>
-                            <span class="ic-{{ channel.kind }}"></span>
+                            <span class="ic">{{ channel.kind }}</span>
                             {{ channel }}
                         </td>
                     </tr>
@@ -252,8 +256,7 @@
                         </span>
                     </th>
                     <td>
-                        <span class="ic-{{ channel.kind }}"></span>
-                        {{ channel }}
+                        <span class="ic">{{ channel.kind }}</span> {{ channel }}
                     </td>
                 </tr>
             {% endfor %}
@@ -307,29 +310,12 @@
         <h2>
             Events
             <small class="hidden-xs">Click on individual items for details</small>
-            <div id="format-switcher" class="btn-group pull-right" data-toggle="buttons">
-                {% if check.kind == "simple" or check.tz != "UTC" %}
-                <label class="btn btn-default btn-xs" data-format="UTC">
-                    <input type="radio" name="date-format">
-                    UTC
+            <div id="tz-switcher" class="btn-group pull-right" data-toggle="buttons">
+                {% for tz in tz_switches %}
+                <label class="btn btn-default btn-xs {% if forloop.last %}active{% endif %}" data-tz="{{ tz }}">
+                    <input type="radio" name="tz-switcher-value"> {{ tz }}
                 </label>
-                {% endif %}
-
-                {% if check.kind == "cron" or check.kind == "oncalendar" %}
-                <label
-                    class="btn btn-default btn-xs active"
-                    data-format="{{ check.tz }}">
-                    <input type="radio" name="date-format">
-                    {{ check.tz }}
-                </label>
-                {% endif %}
-
-                <label
-                    class="btn btn-default btn-xs {% if check.kind == 'simple' %}active{% endif %}"
-                    data-format="local">
-                    <input type="radio" name="date-format">
-                    Browser's time zone
-                </label>
+                {% endfor %}
             </div>
         </h2>
 
@@ -393,11 +379,10 @@
 <script id="common-timezones" type="data">{{ common_timezones|join:"," }}</script>
 <script id="all-timezones" type="data">{{ timezones|join:"," }}</script>
 {% compress js %}
-<script src="{% static 'js/selectize.min.js' %}"></script>
+<script src="{% static 'js/tom-select.popular.min.js' %}"></script>
 <script src="{% static 'js/nouislider.min.js' %}"></script>
 <script src="{% static 'js/snippet-copy.js' %}"></script>
-<script src="{% static 'js/moment.min.js' %}"></script>
-<script src="{% static 'js/moment-timezone-with-data-10-year-range.min.js' %}"></script>
+<script src="{% static 'js/dates.js' %}"></script>
 <script src="{% static 'js/purify.min.js' %}"></script>
 <script src="{% static 'js/initialize-timezone-selects.js' %}"></script>
 <script src="{% static 'js/update-timeout-modal.js' %}"></script>

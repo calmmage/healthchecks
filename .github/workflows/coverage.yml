@@ -6,22 +6,24 @@ on:
     pull_request:
         branches: [master]
 
+permissions: {}
+
 jobs:
     test:
         runs-on: ubuntu-24.04
         steps:
-            - uses: actions/checkout@v3
+            - uses: actions/checkout@v6
             - name: Set up Python
-              uses: actions/setup-python@v4
+              uses: actions/setup-python@v6
               with:
-                  python-version: "3.11"
+                  python-version: "3.12"
             - name: Install Dependencies
               run: |
                   sudo apt-get update -qq
                   sudo apt-get install -y libcurl4-openssl-dev libpython3-dev libssl-dev
                   python -m pip install --upgrade pip
-                  pip install -r requirements.txt
-                  pip install apprise braintree coverage coveralls minio
+                  pip install -r requirements.txt -r requirements-dev.txt
+                  pip install coverage coveralls
             - name: Run Tests
               env:
                   SECRET_KEY: dummy-key

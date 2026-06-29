@@ -27,11 +27,11 @@ termination.
 * Create and start containers:
 
         $ cd docker
-        $ docker-compose up
+        $ docker compose up
 
 * Create a superuser:
 
-        $ docker-compose run web /opt/healthchecks/manage.py createsuperuser
+        $ docker compose run web /opt/healthchecks/manage.py createsuperuser
 
     This will trigger an interactive prompt.
 
@@ -76,10 +76,15 @@ The conditional logic lives in uWSGI configuration file,
 See also: the [PING_EMAIL_DOMAIN](../self_hosted_configuration/#PING_EMAIL_DOMAIN)
 environment variable for customizing the domain part of the email addresses.
 
-## TLS Termination and CSRF Protection {: #tls-termination }
+## Reverse Proxy, TLS Termination, and CSRF Protection {: #tls-termination }
 
 If you plan to expose your Healthchecks instance to the public internet, make sure you
-put a TLS-terminating reverse proxy or load balancer in front of it.
+put a TLS-terminating reverse proxy or a load balancer in front of it.
+
+**Important:** configure the reverse proxy to set the `X-Forwarded-For` request
+header. Healthchecks trusts it to determine the client's IP address. If the proxy
+does not set the `X-Forwarded-For` header, the clients can pass their own value and
+circumvent, among other things, the IP-based rate limiting in the login form.
 
 **Important:** This Dockerfile uses uWSGI, which relies on the [X-Forwarded-Proto](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto)
 header to determine if a request is secure or not. Without this information you
@@ -104,6 +109,39 @@ If you are using haproxy, you can do the same like so:
 ```text
 http-request set-header X-Forwarded-Proto https if { ssl_fc }
 http-request set-header X-Forwarded-Proto http unless { ssl_fc }
+```
+
+## Making Healthchecks Trust Your Self-signed TLS Certificate
+
+If you configure Healthchecks to deliver notifications to a server that uses
+a self-signed TLS certificate, you may see a "TLS handshake failed" error
+when sending a notification.
+
+Healthchecks uses libcurl for making outbound HTTP(S) requests. curl and libcurl
+validates certificates and refuses to continue if a certificate cannot be validated.
+It is possible to turn off certificate validation, but doing so is
+[strongly discouraged in curl docs](https://curl.se/docs/sslcerts.html).
+
+To make curl accept a self-hosted certificate, add your self-signed certificate to
+the Healthchecks container's trust store.
+
+First, mount the certificate inside the container running the healthchecks
+web application. In `docker-compose.yml`, add the following in the `web:` section:
+
+```yaml
+volumes:
+    - /path/to/cert.pem:/usr/local/share/ca-certificates/my-selfsigned-cert.crt:ro
+```
+
+Note: `/path/to/cert.pem` must be **an absolute path** in the host system pointing
+to the certificate.
+
+Then reload configuration and run `update-ca-certificates` inside the container
+as the root user:
+
+```sh
+docker compose up
+docker compose exec -u root web update-ca-certificates
 ```
 
 ## Upgrading Database

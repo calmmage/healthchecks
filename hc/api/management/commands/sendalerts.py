@@ -12,7 +12,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.utils.timezone import now
 
 from hc.api.models import Check, Flip
@@ -22,12 +22,12 @@ logger = logging.getLogger("hc")
 
 
 def notify(flip: Flip) -> str | None:
-    # First, mark the flip as processed:
-    q = Flip.objects.filter(id=flip.id, processed=None)
-    num_updated = q.update(processed=now())
-    if num_updated != 1:
-        # Nothing got updated: another sendalerts process got there first.
-        return None
+    # This is run via ThreadPoolExecutor. The thread may already have an open
+    # db connection. If notify has not run recently then the db connection may have
+    # timed out. We call close_old_connections() to make sure we have a working db
+    # connection. The if condition makes sure this does not run during tests.
+    if not connection.in_atomic_block:
+        close_old_connections()
 
     # Set or clear dates for followup nags
     check = flip.owner
@@ -45,8 +45,10 @@ def notify(flip: Flip) -> str | None:
         code8 = str(ch.code)[:8]
         if error:
             logs.append(f"  {code8} ({ch.kind}) Error in {secs:.1f}s: {error}")
+            statsd.incr(f"hc.notifications.{ch.kind}.fail")
         else:
             logs.append(f"  {code8} ({ch.kind}) OK in {secs:.1f}s")
+            statsd.incr(f"hc.notifications.{ch.kind}.success")
 
     statsd.timing("hc.sendalerts.dwellTime", send_start - flip.created)
     statsd.timing("hc.sendalerts.sendTime", now() - send_start)
@@ -77,7 +79,6 @@ class Command(BaseCommand):
         )
 
     def on_notify_done(self, future: Future[str | None]) -> None:
-        close_old_connections()
         self.seats.release()
 
         try:
@@ -106,6 +107,15 @@ class Command(BaseCommand):
             self.seats.release()
             return False  # No work found, main thread should wait a bit
 
+        # Mark the flip as processed:
+        q = Flip.objects.filter(id=flip.id, processed=None)
+        num_updated = q.update(processed=now())
+        if num_updated != 1:
+            self.seats.release()
+            # Nothing got updated: another sendalerts process got there first.
+            return True
+
+        statsd.incr("hc.sendalerts.processFlip")
         f = self.executor.submit(notify, flip)
         f.add_done_callback(self.on_notify_done)
         return True
@@ -172,12 +182,14 @@ class Command(BaseCommand):
         self.shutdown = True
 
     def handle(self, num_workers: int, pool: bool, **options: Any) -> str:
+        db = settings.DATABASES["default"]
+        if "OPTIONS" in db and "application_name" in db["OPTIONS"]:
+            db["OPTIONS"]["application_name"] = "sendalerts"
+
         if pool:
-            db = settings.DATABASES["default"]
-            # psycopg_pool requires non-persistent connections:
-            db["CONN_MAX_AGE"] = 0
-            options = db.setdefault("OPTIONS", {})
-            options["pool"] = True
+            self.stdout.write(
+                "WARNING: The --pool argument is not supported any more and will be ignored.\n"
+            )
 
         self.seats = BoundedSemaphore(num_workers)
         self.executor = ThreadPoolExecutor(max_workers=num_workers)

@@ -82,6 +82,11 @@ and 5xx indicates a server error.
 
 The response may contain a JSON document with additional data.
 
+## Rate Limits
+
+Avoid making more than 100 API requests per minute. If you exceed this limit, you will
+eventually see HTTP 429 errors.
+
 ## List Existing Checks {: #list-checks .rule }
 
 `GET SITE_ROOT/api/v3/checks/`
@@ -147,6 +152,8 @@ curl --header "X-Api-Key: your-api-key" SITE_ROOT/api/v3/checks/
       "failure_kw": "ERROR",
       "filter_subject": true,
       "filter_body": false,
+      "filter_http_body": false,
+      "filter_default_fail": false,
       "badge_url": "SITE_ROOT/b/2/1b9d0386-d07e-44b0-8995-4a9a372de43c.svg",
       "uuid": "31365bce-8da9-4729-8ff3-aaa71d56b712",
       "ping_url": "PING_ENDPOINT31365bce-8da9-4729-8ff3-aaa71d56b712",
@@ -174,6 +181,8 @@ curl --header "X-Api-Key: your-api-key" SITE_ROOT/api/v3/checks/
       "failure_kw": "",
       "filter_subject": false,
       "filter_body": false,
+      "filter_http_body": false,
+      "filter_default_fail": false,
       "badge_url": "SITE_ROOT/b/2/7d3ab93d-836e-4505-bbda-fcbd5e07adf9.svg",
       "uuid": "803f680d-e89b-492b-82ef-2be7b774a92d",
       "ping_url": "PING_ENDPOINT803f680d-e89b-492b-82ef-2be7b774a92d",
@@ -220,6 +229,8 @@ Example:
       "failure_kw": "ERROR",
       "filter_subject": true,
       "filter_body": false,
+      "filter_http_body": false,
+      "filter_default_fail": false,
       "badge_url": "SITE_ROOT/b/2/1b9d0386-d07e-44b0-8995-4a9a372de43c.svg",
       "unique_key": "a6c7b0a8a66bed0df66abfdab3c77736861703ee",
       "timeout": 3600
@@ -242,6 +253,8 @@ Example:
       "failure_kw": "",
       "filter_subject": false,
       "filter_body": false,
+      "filter_http_body": false,
+      "filter_default_fail": false,
       "badge_url": "SITE_ROOT/b/2/7d3ab93d-836e-4505-bbda-fcbd5e07adf9.svg",
       "unique_key": "124f983e0e3dcaeba921cfcef46efd084576e783",
       "schedule": "15 5 * * *",
@@ -301,6 +314,8 @@ curl --header "X-Api-Key: your-api-key" SITE_ROOT/api/v3/checks/<uuid>
   "failure_kw": "ERROR",
   "filter_subject": true,
   "filter_body": false,
+  "filter_http_body": false,
+  "filter_default_fail": false,
   "badge_url": "SITE_ROOT/b/2/7d3ab93d-836e-4505-bbda-fcbd5e07adf9.svg",
   "uuid": "803f680d-e89b-492b-82ef-2be7b774a92d",
   "ping_url": "PING_ENDPOINT803f680d-e89b-492b-82ef-2be7b774a92d",
@@ -339,11 +354,13 @@ easily construct these URLs themselves *if* they know the check's unique UUID.
   "next_ping": null,
   "manual_resume": false,
   "methods": "",
-  "start_kw": "SUCCESS",
+  "start_kw": "START",
   "success_kw": "SUCCESS",
   "failure_kw": "ERROR",
   "filter_subject": true,
   "filter_body": false,
+  "filter_http_body": false,
+  "filter_default_fail": false,
   "badge_url": "SITE_ROOT/b/2/7d3ab93d-836e-4505-bbda-fcbd5e07adf9.svg",
   "unique_key": "124f983e0e3dcaeba921cfcef46efd084576e783",
   "schedule": "15 5 * * *",
@@ -520,108 +537,103 @@ unique
 start_kw
 :   string, optional, default value: "".
 
-    Specifies the keywords for classifying inbound email messages as "Start" signals.
-    Separate multiple keywords using commas.
+    Specifies the keywords for classifying inbound email messages and HTTP pings as
+    start signals. Separate multiple keywords using commas. Keywords are
+    case-sensitive.
 
-    Use this field in combination with the `filter_subject` and `filter_body` fields.
-    Setting `filter_subject` to `true` enables filtering on the email subject line,
-    `filter_body` enables filtering on the entire email body. SITE_NAME supports both
-    plain text and HTML email messages.
+    Use this field in combination with the `filter_subject`, `filter_body`,
+    and `filter_http_body` fields.
 
     Example:
 
     <pre>{"filter_subject": true, "start_kw": "STARTED"}</pre>
 
-    In this example, SITE_NAME classifies the email as a start signal if the Subject
-    line contains the word "STARTED".
+    In this example, SITE_NAME classifies an inbound email as a start signal if the
+    Subject line contains the word "STARTED".
 
 success_kw
 :   string, optional, default value: "".
 
-    Specifies the keywords for classifying inbound email messages as "Success" signals.
-    Separate multiple keywords using commas.
+    Specifies the keywords for classifying inbound email messages and HTTP pings as
+    success signals. Separate multiple keywords using commas. Keywords are
+    case-sensitive.
 
-    Use this field in combination with the `filter_subject` and `filter_body` fields.
-    Setting `filter_subject` to `true` enables filtering on the email subject line,
-    `filter_body` enables filtering on the entire email body. SITE_NAME supports both
-    plain text and HTML email messages.
+    Use this field in combination with the `filter_subject`, `filter_body`,
+    and `filter_http_body` fields.
 
     Example:
 
     <pre>{"filter_subject": true, "success_kw": "SUCCESS,COMPLETED"}</pre>
 
-    In this example, the email counts as success if the Subject line contains either
-    the word "SUCCESS" or the word "COMPLETED".
+    In this example, an inbound email message counts as success if the Subject line
+    contains either the word "SUCCESS" or the word "COMPLETED".
 
 failure_kw
 :   string, optional, default value: "".
 
-    Specifies the keywords for classifying inbound email messages as "Failure" signals.
-    Separate multiple keywords using commas.
+    Specifies the keywords for classifying inbound email messages and HTTP pings as
+    failure signals. Separate multiple keywords using commas. Keywords are
+    case-sensitive.
 
-    Use this field in combination with the `filter_subject` and `filter_body` fields.
-    Setting `filter_subject` to `true` enables filtering on the email subject line,
-    `filter_body` enables filtering on the entire email body. SITE_NAME supports both
-    plain text and HTML email messages.
+    Use this field in combination with the `filter_subject`, `filter_body`,
+    and `filter_http_body` fields.
 
     Example:
 
-    <pre>{"filter_subject": true, "failure_kw": "FAILED, ERROR"}</pre>
+    <pre>{"filter_subject": true, "failure_kw": "FAILED,ERROR"}</pre>
 
-    In this example, the email counts as failure if the Subject line contains either
-    the word "FAILED" or the word "ERROR".
+    In this example, an inbound email message counts as failure if the Subject line
+    contains either the word "FAILED" or the word "ERROR".
 
 filter_subject
 :   boolean, optional, default value: false.
 
     Enables filtering of inbound email messages by looking for keywords in their
-    subject lines. See also the `success_kw` and `failure_kw` fields.
+    subject lines. See also the `start_kw`, `success_kw`, and `failure_kw` fields.
 
 filter_body
 :   boolean, optional, default value: false.
 
-    Enables filtering of inbound email messages by looking for keywords in their
-    message body. See also the `success_kw` and `failure_kw` fields.
+    Enables filtering of inbound email messages by looking for keywords in the
+    message body. See also the `start_kw`, `success_kw`, and `failure_kw` fields.
 
-subject
-:   string, optional, default value: "".
+    SITE_NAME supports both plain text and HTML email messages, and looks for
+    keywords both in the plain text and the HTML message contents.
 
-    **Deprecated**. Use the `success_kw`, `filter_subject` and `filter_body` fields
-    instead.
+filter_http_body
+:   boolean, optional, default value: false.
 
-    Specifies the keywords for classifying inbound email messages as "Success" signals.
-    Separate multiple keywords using commas. If any of the keywords is found in
-    an email message's Subject line, the email message will count as "Success".
+    Enables filtering of HTTP pings by looking for keywords in the first
+    PING_BODY_LIMIT_FORMATTED of the HTTP request body. See also the
+    `start_kw`, `success_kw`, and `failure_kw` fields.
 
-    Set this field to "" (an empty string) to consider all inbound email messages as
-    "Success" (unless they match any keywords listed in `subject_fail` and are thus
-    classified as "Failure").
+filter_default_fail
+:   boolean, optional, default value: false.
 
-    Example:
+    Determines the handling of email and HTTP pings when keyword filtering is enabled,
+    but no keywords match.
 
-    <pre>SUCCESS,COMPLETED</pre>
+    Keyword filtering is enabled for inbound email messages if either `filter_subject`
+    or `filter_body` (or both) is set to `true`. Keyword filtering is enabled for HTTP
+    pings if `filter_http_body` is set to `true`.
 
-    In this example, the email counts as success if the Subject line contains either
-    the word "SUCCESS" or the word "COMPLETED".
+    If `filter_default_fail=false`, and no keywords match, the ping will be ignored.
 
-subject_fail
-:   string, optional, default value: "".
-
-    **Deprecated**. Use the `failure_kw`, `filter_subject` and `filter_body` fields
-    instead.
-
-    Specifies the keywords for classifying inbound email messages as "Failure" signals.
-    Separate multiple keywords using commas. If any of the keywords is found in
-    an email message's Subject line, the email message will count as "Failure".
-
-    Set this field to "" (an empty string) to perform no "Failure" classification.
+    If `filter_default_fail=true`, and no keywords match, the ping will be
+    classified as a failure signal.
 
     Example:
 
-    <pre>FAILED,ERROR</pre>
+    <pre>{
+        "filter_http_body": true,
+        "filter_default_fail": true,
+        "success_kw": "Backup successful"
+    }</pre>
 
-    In this example, the email counts as failure if the Subject line contains either
-    the word "FAILED" or the word "ERROR".
+    In this example, an HTTP ping will be classified as a success signal if and only if
+    the request body contains the string "Backup successful". In all other cases,
+    including HTTP GET requests with an empty request body, the ping will be classified
+    as a failure signal.
 
 ### Response Codes
 
@@ -680,6 +692,8 @@ curl SITE_ROOT/api/v3/checks/ \
   "failure_kw": "",
   "filter_subject": false,
   "filter_body": false,
+  "filter_http_body": false,
+  "filter_default_fail": false,
   "badge_url": "SITE_ROOT/b/2/d43c84db-1502-4d86-a89d-181a33e25896.svg",
   "uuid": "7918b17b-a745-4db1-8575-9d2e07c97f79",
   "ping_url": "PING_ENDPOINT7918b17b-a745-4db1-8575-9d2e07c97f79",
@@ -835,108 +849,103 @@ channels
 start_kw
 :   string, optional, default value: "".
 
-    Specifies the keywords for classifying inbound email messages as "Start" signals.
-    Separate multiple keywords using commas.
+    Specifies the keywords for classifying inbound email messages and HTTP pings as
+    start signals. Separate multiple keywords using commas. Keywords are
+    case-sensitive.
 
-    Use this field in combination with the `filter_subject` and `filter_body` fields.
-    Setting `filter_subject` to `true` enables filtering on the email subject line,
-    `filter_body` enables filtering on the entire email body. SITE_NAME supports both
-    plain text and HTML email messages.
+    Use this field in combination with the `filter_subject`, `filter_body`,
+    and `filter_http_body` fields.
 
     Example:
 
     <pre>{"filter_subject": true, "start_kw": "STARTED"}</pre>
 
-    In this example, SITE_NAME classifies the email as a start signal if the Subject
-    line contains the word "STARTED".
+    In this example, SITE_NAME classifies an inbound email as a start signal if the
+    Subject line contains the word "STARTED".
 
 success_kw
 :   string, optional, default value: "".
 
-    Specifies the keywords for classifying inbound email messages as "Success" signals.
-    Separate multiple keywords using commas.
+    Specifies the keywords for classifying inbound email messages and HTTP pings as
+    success signals. Separate multiple keywords using commas. Keywords are
+    case-sensitive.
 
-    Use this field in combination with the `filter_subject` and `filter_body` fields.
-    Setting `filter_subject` to `true` enables filtering on the email subject line,
-    `filter_body` enables filtering on the entire email body. SITE_NAME supports both
-    plain text and HTML email messages.
+    Use this field in combination with the `filter_subject`, `filter_body`,
+    and `filter_http_body` fields.
 
     Example:
 
     <pre>{"filter_subject": true, "success_kw": "SUCCESS,COMPLETED"}</pre>
 
-    In this example, the email counts as success if the Subject line contains either
-    the word "SUCCESS" or the word "COMPLETED".
+    In this example, an inbound email message counts as success if the Subject line
+    contains either the word "SUCCESS" or the word "COMPLETED".
 
 failure_kw
 :   string, optional, default value: "".
 
-    Specifies the keywords for classifying inbound email messages as "Failure" signals.
-    Separate multiple keywords using commas.
+    Specifies the keywords for classifying inbound email messages and HTTP pings as
+    failure signals. Separate multiple keywords using commas. Keywords are
+    case-sensitive.
 
-    Use this field in combination with the `filter_subject` and `filter_body` fields.
-    Setting `filter_subject` to `true` enables filtering on the email subject line,
-    `filter_body` enables filtering on the entire email body. SITE_NAME supports both
-    plain text and HTML email messages.
+    Use this field in combination with the `filter_subject`, `filter_body`,
+    and `filter_http_body` fields.
 
     Example:
 
-    <pre>{"filter_subject": true, "failure_kw": "FAILED, ERROR"}</pre>
+    <pre>{"filter_subject": true, "failure_kw": "FAILED,ERROR"}</pre>
 
-    In this example, the email counts as failure if the Subject line contains either
-    the word "FAILED" or the word "ERROR".
+    In this example, an inbound email message counts as failure if the Subject line
+    contains either the word "FAILED" or the word "ERROR".
 
 filter_subject
 :   boolean, optional, default value: false.
 
     Enables filtering of inbound email messages by looking for keywords in their
-    subject lines. See also the `success_kw` and `failure_kw` fields.
+    subject lines. See also the `start_kw`, `success_kw`, and `failure_kw` fields.
 
 filter_body
 :   boolean, optional, default value: false.
 
-    Enables filtering of inbound email messages by looking for keywords in their
-    message body. See also the `success_kw` and `failure_kw` fields.
+    Enables filtering of inbound email messages by looking for keywords in the
+    message body. See also the `start_kw`, `success_kw`, and `failure_kw` fields.
 
-subject
-:   string, optional, default value: "".
+    SITE_NAME supports both plain text and HTML email messages, and looks for
+    keywords both in the plain text and the HTML message contents.
 
-    **Deprecated**. Use the `success_kw`, `filter_subject` and `filter_body` fields
-    instead.
+filter_http_body
+:   boolean, optional, default value: false.
 
-    Specifies the keywords for classifying inbound email messages as "Success" signals.
-    Separate multiple keywords using commas. If any of the keywords is found in
-    an email message's Subject line, the email message will count as "Success".
+    Enables filtering of HTTP pings by looking for keywords in the first
+    PING_BODY_LIMIT_FORMATTED of the HTTP request body. See also the
+    `start_kw`, `success_kw`, and `failure_kw` fields.
 
-    Set this field to "" (an empty string) to consider all inbound email messages as
-    "Success" (unless they match any keywords listed in `subject_fail` and are thus
-    classified as "Failure").
+filter_default_fail
+:   boolean, optional, default value: false.
 
-    Example:
+    Determines the handling of email and HTTP pings when keyword filtering is enabled,
+    but no keywords match.
 
-    <pre>SUCCESS,COMPLETED</pre>
+    Keyword filtering is enabled for inbound email messages if either `filter_subject`
+    or `filter_body` (or both) is set to `true`. Keyword filtering is enabled for HTTP
+    pings if `filter_http_body` is set to `true`.
 
-    In this example, the email counts as success if the Subject line contains either
-    the word "SUCCESS" or the word "COMPLETED".
+    If `filter_default_fail=false`, and no keywords match, the ping will be ignored.
 
-subject_fail
-:   string, optional, default value: "".
-
-    **Deprecated**. Use the `failure_kw`, `filter_subject` and `filter_body` fields
-    instead.
-
-    Specifies the keywords for classifying inbound email messages as "Failure" signals.
-    Separate multiple keywords using commas. If any of the keywords is found in
-    an email message's Subject line, the email message will count as "Failure".
-
-    Set this field to "" (an empty string) to perform no "Failure" classification.
+    If `filter_default_fail=true`, and no keywords match, the ping will be
+    classified as a failure signal.
 
     Example:
 
-    <pre>FAILED,ERROR</pre>
+    <pre>{
+        "filter_http_body": true,
+        "filter_default_fail": true,
+        "success_kw": "Backup successful"
+    }</pre>
 
-    In this example, the email counts as failure if the Subject line contains either
-    the word "FAILED" or the word "ERROR".
+    In this example, an HTTP ping will be classified as a success signal if and only if
+    the request body contains the string "Backup successful". In all other cases,
+    including HTTP GET requests with an empty request body, the ping will be classified
+    as a failure signal.
 
 ### Response Codes
 
@@ -995,6 +1004,8 @@ curl SITE_ROOT/api/v3/checks/7918b17b-a745-4db1-8575-9d2e07c97f79 \
   "failure_kw": "",
   "filter_subject": false,
   "filter_body": false,
+  "filter_http_body": false,
+  "filter_default_fail": false,
   "badge_url": "SITE_ROOT/b/2/d43c84db-1502-4d86-a89d-181a33e25896.svg",
   "uuid": "7918b17b-a745-4db1-8575-9d2e07c97f79",
   "ping_url": "PING_ENDPOINT7918b17b-a745-4db1-8575-9d2e07c97f79",
@@ -1064,6 +1075,8 @@ header is sometimes required by some network proxies and web servers.
   "failure_kw": "",
   "filter_subject": false,
   "filter_body": false,
+  "filter_http_body": false,
+  "filter_default_fail": false,
   "badge_url": "SITE_ROOT/b/2/d43c84db-1502-4d86-a89d-181a33e25896.svg",
   "uuid": "7918b17b-a745-4db1-8575-9d2e07c97f79",
   "ping_url": "PING_ENDPOINT7918b17b-a745-4db1-8575-9d2e07c97f79",
@@ -1136,6 +1149,8 @@ header is sometimes required by some network proxies and web servers.
   "failure_kw": "",
   "filter_subject": false,
   "filter_body": false,
+  "filter_http_body": false,
+  "filter_default_fail": false,
   "badge_url": "SITE_ROOT/b/2/d43c84db-1502-4d86-a89d-181a33e25896.svg",
   "uuid": "7918b17b-a745-4db1-8575-9d2e07c97f79",
   "ping_url": "PING_ENDPOINT7918b17b-a745-4db1-8575-9d2e07c97f79",
@@ -1201,6 +1216,8 @@ curl SITE_ROOT/api/v3/checks/7918b17b-a745-4db1-8575-9d2e07c97f79 \
   "failure_kw": "",
   "filter_subject": false,
   "filter_body": false,
+  "filter_http_body": false,
+  "filter_default_fail": false,
   "badge_url": "SITE_ROOT/b/2/d43c84db-1502-4d86-a89d-181a33e25896.svg",
   "uuid": "7918b17b-a745-4db1-8575-9d2e07c97f79",
   "ping_url": "PING_ENDPOINT7918b17b-a745-4db1-8575-9d2e07c97f79",
@@ -1341,10 +1358,10 @@ parameters. If no time filters are specified, the API returns all stored
 flips for a given check.
 
 Notes about flip retention: SITE_NAME stores historic flips for the current month
-and for two full months prior to the current month. The cleanup of older flips is
-[a manual administrative action](../self_hosted/#database-cleanup).
-Therefore, SITE_NAME may return even older flips if the server administrator does not
-perform regular database cleanups.
+and for two full months prior to the current month. SITE_NAME cleans up older flips
+periodically. At any given time, there may be a low number of flips in the database
+that are due to be removed, but have not been removed yet. This API call will
+return these flips as well.
 
 ### Query Parameters
 

@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 from aiosmtpd.smtp import Envelope, Session
 from django.test.utils import override_settings
+
 from hc.api.management.commands.smtpd import PingHandler, _process_message
 from hc.api.models import Check, Ping
 from hc.test import BaseTestCase
@@ -302,3 +303,54 @@ class SmtpdTestCase(BaseTestCase):
             "1.2.3.4", "foobar@example.org", mailto, b"hello world"
         )
         self.assertEqual(result, f"Ambiguous slug: {mailto}")
+
+    def test_it_handles_filter_default_fail(self) -> None:
+        self.check.filter_subject = True
+        self.check.success_kw = "SUCCESS"
+        self.check.filter_default_fail = True
+        self.check.save()
+
+        body = PAYLOAD_TMPL % "This subject does not contain the expected keyword"
+        _process_message("1.2.3.4", "foo@example.org", self.email, body.encode("utf8"))
+
+        ping = Ping.objects.latest("id")
+        self.assertEqual(ping.kind, "fail")
+
+    def test_it_ignores_http_body_filters(self) -> None:
+        self.check.filter_http_body = True
+        self.check.success_kw = "SUCCESS"
+        self.check.filter_default_fail = True
+        self.check.save()
+
+        body = PAYLOAD_TMPL % "This subject does not contain the expected keyword"
+        _process_message("1.2.3.4", "foo@example.org", self.email, body.encode("utf8"))
+
+        ping = Ping.objects.latest("id")
+        self.assertEqual(ping.kind, None)
+
+    def test_manual_resume_takes_precedence_over_keywords(self) -> None:
+        self.check.filter_subject = True
+        self.check.success_kw = "SUCCESS"
+        self.check.manual_resume = True
+        self.check.status = "paused"
+        self.check.save()
+
+        body = PAYLOAD_TMPL % "[SUCCESS] All is well"
+        _process_message("1.2.3.4", "foo@example.org", self.email, body.encode("utf8"))
+
+        ping = Ping.objects.get()
+        # Since the check is paused and manual resume is enabled, the ping should
+        # be ignored even though keywords do match
+        self.assertEqual(ping.kind, "ign")
+
+    def test_it_handles_non_ascii_keywords(self) -> None:
+        self.check.filter_body = True
+        self.check.failure_kw = "glāžšķūņu"
+        self.check.save()
+
+        body = HTML_PAYLOAD_TMPL % ("subject", "glāžšķūņu rūķīši")
+        _process_message("1.2.3.4", "foo@example.org", self.email, body.encode("utf8"))
+
+        ping = Ping.objects.latest("id")
+        self.assertEqual(ping.scheme, "email")
+        self.assertEqual(ping.kind, "fail")

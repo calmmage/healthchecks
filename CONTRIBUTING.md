@@ -12,6 +12,13 @@ submit pull requests or issues produced with the help of LLMs or code generation
 assistants, they will be closed with no discussion. Do not write emails
 generated or rewritten by LLMs, they will be marked as spam.
 
+## Pull Requests
+
+Pull requests are currently disabled in this repository due to ongoing
+AI-generated spam. This project *still accepts code contributions*. Rather
+can creating a pull request, please mention the repository & branch with
+your completed feature or bugfix in an issue comment.
+
 ## Code Style
 
 * Format your Python code with [ruff](https://docs.astral.sh/ruff/).
@@ -48,18 +55,23 @@ The best way to build a new integration is to pick a similar existing integratio
 as a starting point for the new integration and replicate every aspect of it.
 You will need to make changes in the following files:
 
-* Add a new class in `/hc/api/transports.py`.
-* Add a new notification template in `/templates/integrations/`.
-* Write testcases for the new transport class in `/hc/api/tests/test_notify_<kind>.py`.
+* In `/hc/integrations/`, copy an existing integration to a new directory
+* Edit the transport class in `/hc/integrations/<kind>/transport.py`.
+* Edit the notification template(s) in `/hc/integrations/<kind>/templates/`.
+* Write testcases for the transport class in
+  `/hc/integrations/<kind>/tests/test_notify.py`.
 * Update `TRANSPORTS` in `/hc/api/models.py`.
-* Create a view for provisioning the new integration in `/hc/front/views.py`.
-* Write a HTML template for the new view in `/templates/front/add_<kind>.py`, and
-  prepare any supporting illustrations in `/static/img/integrations/`.
-* Add a route for the new view in `/hc/front/urls.py`.
-* Write testcases for the new view in `/hc/font/tests/test_add_<kind>.py`.
+* Edit the view(s) for provisioning the integration in
+  `/hc/integrations/<kind>/views.py`.
+* Write a HTML template for the new view in
+  `/hc/integrations/<kind>/templates/</add_<kind>.py`, and prepare any supporting
+  illustrations in `/hc/integrations/<kind>/static/img/`.
+* Edit routes for the new view(s) in `/hc/integrations/<kind>/urls.py`.
+* Include the new integration's urls.py in `/hc/urls.py`
+* Write testcases for the new view in `/hc/integrations/<kind>/tests/test_add.py`.
 * Update `/templates/front/channels.html` – add a new section in the list of available
   integrations, make sure an existing integration is displayed nicely.
 * Update `/templates/front/event_summary.html` to make sure notifications sent to the
   new integration are displayed nicely.
-* Add a logo in `/static/img/integrations/`.
+* Add a logo in `/hc/integrations/<kind>static/img/`.
 * Update the icon font (it's a little tricky to do, I can take care of that).

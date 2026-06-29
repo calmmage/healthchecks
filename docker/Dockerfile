@@ -1,21 +1,25 @@
-FROM python:3.13.1-slim-bookworm AS builder
+FROM python:3.14.4-slim-trixie AS builder
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 COPY requirements.txt /tmp
+# build-essential is required to build uswsi, psycopg, mysqlclient
+# libffi-dev is required to build cffi (a dependency of minio)
+# libpq-dev is required to build psycopg[c]
+# libmaria-dev is required to build mysqlclient
+# libcurl4-openssl-dev is required to build pycurl
+# pkg-config is required to build mysqlclient
 RUN \
     apt-get update && \
-    apt-get install -y build-essential curl libpq-dev libmariadb-dev libffi-dev libpcre2-dev libssl-dev libcurl4-openssl-dev libpython3-dev pkg-config
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- --profile minimal -y
-ENV PATH=$PATH:/root/.cargo/bin
-RUN pip wheel --wheel-dir /wheels apprise uwsgi mysqlclient minio psycopg-c==3.2.3 -r /tmp/requirements.txt
+    apt-get install -y build-essential libffi-dev libpq-dev libmariadb-dev libcurl4-openssl-dev pkg-config
+RUN pip wheel --wheel-dir /wheels apprise uwsgi mysqlclient minio==7.2.20 "psycopg[c]" -r /tmp/requirements.txt
 
 COPY . /opt/healthchecks/
 RUN \
     rm -rf /opt/healthchecks/.git && \
     rm -rf /opt/healthchecks/stuff
 
-FROM python:3.13.0-slim-bookworm
+FROM python:3.14.4-slim-trixie
 
 RUN useradd --system hc
 ENV PYTHONUNBUFFERED=1
@@ -23,10 +27,9 @@ WORKDIR /opt/healthchecks
 
 RUN \
     apt-get update && \
-    apt-get install -y libcurl4 libexpat1 libpq5 libmariadb3 libxml2 && \
+    apt-get install -y libcurl4t64 libpq5 libmariadb3 && \
     rm -rf /var/apt/cache && \
     rm -rf /var/lib/apt/lists
-
 
 RUN --mount=type=bind,target=/wheels,source=/wheels,from=builder \
     pip install --upgrade pip && \

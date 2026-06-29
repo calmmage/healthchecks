@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from django.conf import settings
 from django.contrib import auth
-from django.contrib.auth.models import User
 from django.core.exceptions import MiddlewareNotUsed
 from django.http import HttpRequest, HttpResponse
 
@@ -74,7 +73,6 @@ class CustomHeaderMiddleware:
         # We are seeing this user for the first time in this session, attempt
         # to authenticate the user.
         if user := auth.authenticate(request, remote_user_email=email):
-            assert isinstance(user, User)
             # User is valid.  Set request.user and persist user in the session
             # by logging the user in.
             request.user = user

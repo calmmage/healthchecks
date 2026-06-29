@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from django.template.defaultfilters import pluralize
 from django.utils.timezone import now
 
 
@@ -32,9 +33,9 @@ def format_duration(duration: timedelta) -> str:
 
         v, remaining_seconds = divmod(remaining_seconds, unit.nsecs)
         if v == 1:
-            result.append("1 %s" % unit.name)
+            result.append(f"1 {unit.name}")
         elif v > 1:
-            result.append("%d %s" % (v, unit.plural))
+            result.append(f"{v} {unit.plural}")
 
     return " ".join(result)
 
@@ -42,7 +43,7 @@ def format_duration(duration: timedelta) -> str:
 def format_hms(duration: timedelta) -> str:
     total_seconds = duration.total_seconds()
     if 0.01 <= total_seconds < 1:
-        return "%.2f sec" % total_seconds
+        return f"{total_seconds:.2f} sec"
 
     total_seconds = int(total_seconds)
     result = []
@@ -51,12 +52,12 @@ def format_hms(duration: timedelta) -> str:
     h, mins = divmod(mins, 60)
 
     if h:
-        result.append("%d h" % h)
+        result.append(f"{h} h")
 
     if h or mins:
-        result.append("%d min" % mins)
+        result.append(f"{mins} min")
 
-    result.append("%s sec" % secs)
+    result.append(f"{secs} sec")
 
     return " ".join(result)
 
@@ -78,6 +79,25 @@ def format_approx_duration(duration: timedelta) -> str:
         return f"{hours} h {mins} min"
 
     return f"{mins} min {secs} sec"
+
+
+def format_duration_for_sentence(duration: timedelta) -> str:
+    total_seconds = int(duration.total_seconds())
+
+    mins, secs = divmod(total_seconds, 60)
+    hours, mins = divmod(mins, 60)
+    days, hours = divmod(hours, 24)
+
+    if days:
+        return f"{days} day{pluralize(days)}, {hours} hour{pluralize(hours)}"
+
+    if hours:
+        return f"{hours} hour{pluralize(hours)}, {mins} minute{pluralize(mins)}"
+
+    if mins:
+        return f"{mins} minute{pluralize(mins)}, {secs} second{pluralize(secs)}"
+
+    return f"{secs} second{pluralize(secs)}"
 
 
 def month_boundaries(months: int, tzstr: str) -> list[datetime]:
@@ -108,6 +128,19 @@ def week_boundaries(weeks: int, tzstr: str) -> list[datetime]:
     for x in range(0, weeks):
         result.append(datetime(needle.year, needle.month, needle.day, tzinfo=tz))
         needle -= timedelta(days=7)
+
+    return result
+
+
+def day_boundaries(days: int, tzstr: str) -> list[datetime]:
+    """Return day start times in descending order starting from today."""
+    tz = ZoneInfo(tzstr)
+    result: list[datetime] = []
+
+    needle = now().astimezone(tz).date()
+    for x in range(0, days):
+        result.append(datetime(needle.year, needle.month, needle.day, tzinfo=tz))
+        needle -= timedelta(days=1)
 
     return result
 

@@ -17,10 +17,12 @@ from django.core.signing import BadSignature, TimestampSigner
 from django.db import models
 from django.db.models import Q, QuerySet
 from django.db.models.functions import Lower
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.timezone import now
+
 from hc.lib import emails
-from hc.lib.date import month_boundaries, week_boundaries
+from hc.lib.date import day_boundaries, month_boundaries, week_boundaries
 from hc.lib.signing import sign_bounce_id
 from hc.lib.urls import absolute_reverse
 
@@ -39,7 +41,12 @@ NAG_PERIODS = (
     (td(days=1), "Daily"),
 )
 
-REPORT_CHOICES = (("off", "Off"), ("weekly", "Weekly"), ("monthly", "Monthly"))
+REPORT_CHOICES = (
+    ("off", "Off"),
+    ("daily", "Daily"),
+    ("weekly", "Weekly"),
+    ("monthly", "Monthly"),
+)
 # How long an account can be over limits before it is scheduled for deletion
 OVER_LIMIT_GRACE = td(days=31)
 # When scheduling for deletion, how many days in the future to schedule
@@ -62,7 +69,6 @@ class ProfileManager(models.Manager["Profile"]):
                 profile.check_limit = 10000
                 profile.sms_limit = 10000
                 profile.call_limit = 10000
-                profile.team_limit = 10000
 
             profile.save()
             return profile
@@ -79,14 +85,13 @@ class Profile(models.Model):
     token = models.CharField(max_length=128, blank=True)
 
     last_sms_date = models.DateTimeField(null=True, blank=True)
-    sms_limit = models.IntegerField(default=5)
+    sms_limit = models.IntegerField(default=0)
     sms_sent = models.IntegerField(default=0)
 
     last_call_date = models.DateTimeField(null=True, blank=True)
     call_limit = models.IntegerField(default=0)
     calls_sent = models.IntegerField(default=0)
 
-    team_limit = models.IntegerField(default=2)
     sort = models.CharField(max_length=20, default="created")
     # The date when "Inactive Account Notification" is sent
     deletion_notice_date = models.DateTimeField(null=True, blank=True)
@@ -177,20 +182,6 @@ class Profile(models.Model):
         }
         emails.transfer_request(self.user.email, ctx)
 
-    def send_sms_limit_notice(self, transport: str) -> None:
-        ctx = {"transport": transport, "limit": self.sms_limit}
-        if self.sms_limit != 500 and settings.USE_PAYMENTS:
-            ctx["url"] = absolute_reverse("hc-pricing")
-
-        emails.sms_limit(self.user.email, ctx)
-
-    def send_call_limit_notice(self) -> None:
-        ctx: dict[str, Any] = {"limit": self.call_limit}
-        if self.call_limit != 500 and settings.USE_PAYMENTS:
-            ctx["url"] = absolute_reverse("hc-pricing")
-
-        emails.call_limit(self.user.email, ctx)
-
     def projects(self) -> QuerySet[Project]:
         """Return a queryset of all projects we have access to."""
 
@@ -218,44 +209,65 @@ class Profile(models.Model):
             return False
 
         # Sort checks by project. Need this because will group by project in template.
-        q = q.select_related("project").order_by("project_id")
+        # Sort primarily by project name, but projects can have duplicate names
+        # so sort by project id also.
+        # Checks in each project will be sorted by check name in the template,
+        # after grouping.
+        q = q.select_related("project").order_by("project__name", "project_id")
         # list() executes the query, to avoid DB access while rendering the template.
         checks = list(q)
 
         unsub_url = self.reports_unsub_url()
         headers = {
-            "X-Bounce-ID": sign_bounce_id("r.%s" % self.user.username),
-            "List-Unsubscribe": "<%s>" % unsub_url,
+            "X-Bounce-ID": sign_bounce_id(f"r.{self.user.username}"),
+            "List-Unsubscribe": f"<{unsub_url}>",
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         }
         ctx: dict[str, Any] = {
-            "sort": self.sort,
             "unsub_link": unsub_url,
             "notifications_url": self.notifications_url(),
             "tz": self.tz,
         }
 
         if not nag:
-            # For weekly and monthly reports, calculate the downtimes,
+            # For monthly/weekly/daily reports, calculate the downtimes,
             # throw away the current period, keep two previous periods
-            if self.reports == "weekly":
-                boundaries = week_boundaries(3, self.tz)
-            else:
+            if self.reports == "monthly":
                 boundaries = month_boundaries(3, self.tz)
+            elif self.reports == "weekly":
+                boundaries = week_boundaries(3, self.tz)
+            elif self.reports == "daily":
+                boundaries = day_boundaries(3, self.tz)
+            else:
+                assert 0, f"Unexpected Profile.reports value: {self.reports}"
 
+            ctx["summary_nchecks"] = 0
+            ctx["summary_ntimes"] = 0
             for check in checks:
                 downtimes = check.downtimes_by_boundary(boundaries, self.tz)
                 # downtimes_by_boundary returns records in descending order,
                 # but the template will need them in ascending order:
                 downtimes.reverse()
-                setattr(check, "past_downtimes", downtimes[:-1])
+                check.past_downtimes = downtimes[:-1]
+                if count := check.past_downtimes[-1].count:
+                    ctx["summary_nchecks"] += 1
+                    ctx["summary_ntimes"] += count
 
             # boundaries are in descending order, but the template
             # will need them in ascending order:
             boundaries.reverse()
             ctx["checks"] = checks
             ctx["boundaries"] = boundaries[:-1]
-            ctx["monthly_or_weekly"] = self.reports
+            ctx["report_period"] = self.reports
+
+            # Prepare the "In January" / "Last week (...)" / "Yesterday (...)" bit:
+            when_ctx = {
+                "boundary": ctx["boundaries"][-1],
+                "report_period": self.reports,
+                "tz": self.tz,
+            }
+            ctx["when"] = render_to_string("emails/report-when.html", when_ctx).strip()
+
             emails.report(self.user.email, ctx, headers)
 
         if nag:
@@ -355,6 +367,8 @@ class Profile(models.Model):
 
         while True:
             dt += td(days=1)
+            if self.reports == "daily":
+                return dt
             if self.reports == "monthly" and dt.day == 1:
                 return dt
             elif self.reports == "weekly" and dt.weekday() == 0:
@@ -444,11 +458,6 @@ class Project(models.Model):
         q = User.objects.filter(memberships__project__owner_id=self.owner_id)
         q = q.exclude(memberships__project=self)
         return q.distinct().order_by("email")
-
-    def can_invite_new_users(self) -> bool:
-        q = User.objects.filter(memberships__project__owner_id=self.owner_id)
-        used = q.distinct().count()
-        return used < self.owner_profile.team_limit
 
     def invite(self, user: User, role: str) -> bool:
         if Member.objects.filter(user=user, project=self).exists():
@@ -544,11 +553,18 @@ class Project(models.Model):
         self.api_key_readonly = key_hash
         return key
 
-    def set_ping_key(self) -> None:
+    def set_ping_key(self) -> str:
+        # The ping key will be:
+        # - 22 characters long, consisting of [a-z0-9]
+        # - no "_" or "-" characters for aesthetic reasons
+        # - no uppercase characters to avoid case-sensitivity issues
+        #   in email addresses.
+        # The ping key will have ~113 bits of entropy.
         while True:
-            self.ping_key = token_urlsafe(16)  # 22 character string
+            self.ping_key = token_urlsafe(16).lower()
             if "_" not in self.ping_key and "-" not in self.ping_key:
                 break
+        return self.ping_key
 
     def compare_api_key(self, key: str) -> bool:
         if key.startswith("hcr_"):
@@ -563,6 +579,11 @@ class Project(models.Model):
 
         digest = hmac.digest(settings.SECRET_KEY.encode(), key.encode(), "sha256")
         return hmac.compare_digest(digest.hex(), key_hash)
+
+    def team_emails(self) -> list[str]:
+        q = User.objects.filter(memberships__project=self).order_by("email")
+        member_emails = list(q.values_list("email", flat=True))
+        return [self.owner.email] + member_emails
 
 
 class Member(models.Model):

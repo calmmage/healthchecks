@@ -10,10 +10,9 @@ import pyotp
 import segno
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, update_session_auth_hash
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout as auth_logout
-from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
@@ -32,6 +31,7 @@ from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_POST
+
 from hc.accounts import forms
 from hc.accounts.decorators import require_sudo_mode
 from hc.accounts.http import AuthenticatedHttpRequest
@@ -219,7 +219,7 @@ def signup(request: HttpRequest) -> HttpResponse:
     if not settings.REGISTRATION_OPEN or request.user.is_authenticated:
         return HttpResponseForbidden()
 
-    ctx = {}
+    ctx: dict[str, object] = {}
     form = forms.SignupForm(request)
     if form.is_valid():
         email = form.cleaned_data["identity"]
@@ -268,14 +268,12 @@ def check_token(
 
     user = authenticate(username=username, token=token)
     if user is not None and user.is_active:
-        assert isinstance(user, User)
         if new_email:
             if User.objects.filter(email=new_email).exists():
                 request.session["bad_link"] = True
                 return redirect("hc-login")
 
             user.email = new_email
-            user.set_unusable_password()
             user.save()
 
         user.profile.token = ""
@@ -295,12 +293,14 @@ def profile(request: AuthenticatedHttpRequest) -> HttpResponse:
         "profile": profile,
         "my_projects_status": "default",
         "2fa_status": "default",
+        "tz_status": "default",
         "added_credential_name": request.session.pop("added_credential_name", ""),
         "removed_credential_name": request.session.pop("removed_credential_name", ""),
         "enabled_totp": request.session.pop("enabled_totp", False),
         "disabled_totp": request.session.pop("disabled_totp", False),
         "credentials": list(request.user.credentials.order_by("id")),
         "use_webauthn": settings.RP_ID,
+        "timezones": all_timezones,
     }
 
     if ctx["added_credential_name"] or ctx["enabled_totp"]:
@@ -314,9 +314,14 @@ def profile(request: AuthenticatedHttpRequest) -> HttpResponse:
         ctx["email_password_status"] = "success"
 
     if request.method == "POST" and "leave_project" in request.POST:
-        code = request.POST["code"]
+        leave_form = forms.LeaveForm(request.POST)
+        if not leave_form.is_valid():
+            return HttpResponseBadRequest()
+
         try:
-            project = Project.objects.get(code=code, member__user=request.user)
+            project = Project.objects.get(
+                code=leave_form.cleaned_data["code"], member__user=request.user
+            )
         except Project.DoesNotExist:
             return HttpResponseBadRequest()
 
@@ -324,6 +329,14 @@ def profile(request: AuthenticatedHttpRequest) -> HttpResponse:
 
         ctx["left_project"] = project
         ctx["my_projects_status"] = "info"
+
+    if request.method == "POST" and "tz" in request.POST:
+        form = forms.TzForm(request.POST)
+        if form.is_valid():
+            profile.tz = form.cleaned_data["tz"]
+            profile.save()
+            ctx["tz_status"] = "info"
+            ctx["tz_updated"] = True
 
     ctx["ownerships"] = request.user.project_set.order_by(Lower("name"))
     ctx["memberships"] = request.user.memberships.order_by(Lower("project__name"))
@@ -378,7 +391,7 @@ def project(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
             elif request.POST["create_key"] == "api_key_readonly":
                 ctx["new_key"] = project.set_api_key_readonly()
             elif request.POST["create_key"] == "ping_key":
-                project.set_ping_key()
+                ctx["new_ping_key"] = project.set_ping_key()
             project.save()
 
             ctx["key_created"] = True
@@ -407,10 +420,6 @@ def project(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
 
                 invite_suggestions = project.invite_suggestions()
                 if not invite_suggestions.filter(email=email).exists():
-                    # We're inviting a new user. Are we within team size limit?
-                    if not project.can_invite_new_users():
-                        return HttpResponseForbidden()
-
                     # And are we not hitting a rate limit?
                     if not TokenBucket.authorize_invite(request.user):
                         return render(request, "try_later.html")
@@ -530,7 +539,6 @@ def project(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
 
     mq = project.member_set.select_related("user").order_by("user__email")
     ctx["memberships"] = list(mq)
-    ctx["can_invite_new_users"] = project.can_invite_new_users()
     return render(request, "accounts/project.html", ctx)
 
 
@@ -548,8 +556,6 @@ def notifications(request: AuthenticatedHttpRequest) -> HttpResponse:
     if request.method == "POST":
         form = forms.ReportSettingsForm(request.POST)
         if form.is_valid():
-            if form.cleaned_data["tz"]:
-                profile.tz = form.cleaned_data["tz"]
             profile.reports = form.cleaned_data["reports"]
             profile.next_report_date = profile.choose_next_report_date()
 
@@ -704,7 +710,7 @@ def close(request: AuthenticatedHttpRequest) -> HttpResponse:
 def remove_project(request: AuthenticatedHttpRequest, code: str) -> HttpResponse:
     project = get_object_or_404(Project, code=code, owner=request.user)
     for check in project.check_set.all():
-        check.lock_and_delete()
+        check.rename_and_delete()
     project.delete()
     return redirect("hc-index")
 

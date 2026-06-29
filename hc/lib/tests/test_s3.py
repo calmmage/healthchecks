@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from unittest import skipIf
-from unittest.mock import call, Mock, patch
+from unittest.mock import Mock, call, patch
 
 from django.test import TestCase
 from django.test.utils import override_settings
 
-from hc.lib.s3 import get_object, GetObjectError
+from hc.lib.s3 import GetObjectError, get_object
 
 try:
     from minio import InvalidResponseError, S3Error
@@ -23,7 +23,14 @@ class S3TestCase(TestCase):
     @patch("hc.lib.s3.statsd")
     @patch("hc.lib.s3._client")
     def test_get_object_handles_nosuchkey(self, client: Mock, statsd: Mock) -> None:
-        e = S3Error("NoSuchKey", "b", "c", "d", "e", Mock())
+        e = S3Error(
+            code="NoSuchKey",
+            message="test-message",
+            resource="test-resource",
+            request_id="test-request-id",
+            host_id="test-host-id",
+            response=Mock(),
+        )
         client.get_object.return_value.read = Mock(side_effect=e)
         self.assertIsNone(get_object("dummy-code", 1))
         # Should not increase the error counter for NoSuchKey responses
@@ -32,15 +39,25 @@ class S3TestCase(TestCase):
     @patch("hc.lib.s3.statsd")
     @patch("hc.lib.s3._client")
     def test_get_object_handles_s3error(self, client: Mock, statsd: Mock) -> None:
-        e = S3Error("DummyError", "b", "c", "d", "e", Mock())
+        e = S3Error(
+            code="DummyError",
+            message="test-message",
+            resource="test-resource",
+            request_id="test-request-id",
+            host_id="test-host-id",
+            response=Mock(),
+        )
         client.get_object.return_value.read = Mock(side_effect=e)
         with self.assertRaises(GetObjectError):
             get_object("dummy-code", 1)
         client.get_object.assert_called_once()
         statsd.incr.assert_called_once()
 
+    @patch("hc.lib.s3.statsd")
     @patch("hc.lib.s3._client")
-    def test_get_object_handles_urllib_exceptions(self, client: Mock) -> None:
+    def test_get_object_handles_urllib_exceptions(
+        self, client: Mock, statsd: Mock
+    ) -> None:
         for e in [ProtocolError, InvalidHeader]:
             client.get_object.reset_mock()
             client.get_object.return_value.read = Mock(side_effect=e)
@@ -48,13 +65,17 @@ class S3TestCase(TestCase):
                 get_object("dummy-code", 1)
             client.get_object.assert_called_once()
 
+    @patch("hc.lib.s3.statsd")
     @patch("hc.lib.s3._client")
-    def test_get_object_handles_invalidresponseerror(self, client: Mock) -> None:
+    def test_get_object_handles_invalidresponseerror(
+        self, client: Mock, statsd: Mock
+    ) -> None:
         e = InvalidResponseError(123, "text/plain", None)
         client.get_object.return_value.read = Mock(side_effect=e)
         with self.assertRaises(GetObjectError):
             get_object("dummy-code", 1)
         client.get_object.assert_called_once()
+        statsd.incr.assert_called_once()
 
     @override_settings(S3_BUCKET=None)
     @patch("hc.lib.s3._client")

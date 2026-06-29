@@ -19,6 +19,12 @@
     border-top: 0;
 }
 
+#checks-table th .ic-asc,
+#checks-table th .ic-desc {
+    position: relative;
+    top: 2px;
+}
+
 #checks-table a.default {
     color: var(--text-color);
 }
@@ -57,6 +63,7 @@
 
 #checks-table .integrations {
     white-space: nowrap;
+    user-select: none;
 }
 
 #checks-table .integrations span {
@@ -66,12 +73,16 @@
     width: 24px;
 }
 
-#checks-table .integrations span.off:before {
-    color: var(--channel-off-inside-color);
+body.dark .ic {
+    font-palette: --palette1;
 }
 
-#checks-table .integrations span.off:after {
-    color: var(--channel-off-color);
+#checks-table .integrations span.off {
+    font-palette: --palette2;
+}
+
+body.dark #checks-table .integrations span.off {
+    font-palette: --palette3;
 }
 
 .timeout-grace .cron-expression {

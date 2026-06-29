@@ -8,11 +8,18 @@ from uuid import UUID
 
 from django import template
 from django.conf import settings
+from django.http import HttpRequest
 from django.templatetags.static import static
 from django.utils.html import escape, format_html
 from django.utils.safestring import SafeString, mark_safe
 from django.utils.timezone import now
-from hc.lib.date import format_approx_duration, format_duration, format_hms
+
+from hc.lib.date import (
+    format_approx_duration,
+    format_duration,
+    format_duration_for_sentence,
+    format_hms,
+)
 from hc.lib.urls import absolute_url
 
 if TYPE_CHECKING:
@@ -30,6 +37,11 @@ def hc_duration(d: timedelta) -> str:
 @register.filter
 def hc_approx_duration(d: timedelta) -> str:
     return format_approx_duration(d)
+
+
+@register.filter
+def hc_duration_for_sentence(d: timedelta) -> str:
+    return format_duration_for_sentence(d)
 
 
 @register.filter
@@ -143,10 +155,24 @@ def sortchecks(checks: list[Check], key: str) -> list[Check]:
     return checks
 
 
+def downtime_key(check: Check) -> timedelta:
+    assert check.past_downtimes
+    return check.past_downtimes[-1].duration
+
+
+@register.filter
+def sortbydowntime(checks: list[Check]) -> list[Check]:
+    """Sort the list of checks in-place by downtime (descending), then by name."""
+
+    checks.sort(key=natural_name_key)
+    checks.sort(key=downtime_key, reverse=True)
+    return checks
+
+
 @register.filter
 def num_down_title(num_down: int) -> str:
     if num_down:
-        return "%d down – %s" % (num_down, settings.SITE_NAME)
+        return f"{num_down} down – {settings.SITE_NAME}"
     else:
         return settings.SITE_NAME
 
@@ -278,18 +304,12 @@ def mask_phone(phone: str) -> str:
 
 @register.simple_tag(takes_context=True)
 def sort_url(context: dict[str, Any], sort: str) -> SafeString:
-    q = context["request"].GET.copy()
+    request = context["request"]
+    assert isinstance(request, HttpRequest)
+    q = request.GET.copy()
     q["sort"] = sort
     urlencoded = q.urlencode()
-    assert isinstance(urlencoded, str)
     return mark_safe("?" + urlencoded)
-
-
-@register.filter
-def fix_asterisks(s: str) -> str:
-    """Prepend asterisks with "Combining Grapheme Joiner" characters."""
-
-    return s.replace("*", "\u034f*")
 
 
 @register.filter
@@ -300,3 +320,8 @@ def pct(v: float) -> str:
 @register.filter
 def decode(v: bytes) -> str:
     return bytes(v).decode(errors="replace")
+
+
+@register.filter
+def uppercase_if_down(s: str) -> str:
+    return "DOWN" if s == "down" else s

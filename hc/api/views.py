@@ -3,9 +3,8 @@ from __future__ import annotations
 import email.policy
 import time
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timezone
 from datetime import timedelta as td
-from datetime import timezone
 from email import message_from_bytes
 from ipaddress import ip_address
 from typing import Any, Literal
@@ -31,17 +30,18 @@ from django.utils.timezone import now
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from hc.accounts.models import Profile, Project
-from hc.api.decorators import ApiRequest, authorize, authorize_read, cors
-from hc.api.forms import FlipsFiltersForm
-from hc.api.models import MAX_DURATION, Channel, Check, Flip, Notification, Ping
-from hc.lib.badges import check_signature, get_badge_svg, get_badge_url
-from hc.lib.signing import unsign_bounce_id
-from hc.lib.string import is_valid_uuid_string
-from hc.lib.tz import all_timezones, legacy_timezones
 from oncalendar import OnCalendar, OnCalendarError
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from pydantic_core import PydanticCustomError
+
+from hc.accounts.models import Profile, Project
+from hc.api.decorators import ApiRequest, authorize, authorize_read, cors
+from hc.api.forms import FlipsFiltersForm
+from hc.api.models import Channel, Check, Flip, Notification, Ping, prepare_durations
+from hc.lib.badges import check_signature, get_badge_svg, get_badge_url
+from hc.lib.signing import unsign_bounce_id
+from hc.lib.string import is_valid_uuid_string, match_keywords
+from hc.lib.tz import all_timezones, legacy_timezones
 
 
 class BadChannelException(Exception):
@@ -61,8 +61,10 @@ class Spec(BaseModel):
     channels: str | None = None
     desc: str | None = None
     failure_kw: str | None = Field(None, max_length=200)
-    filter_body: bool | None = None
     filter_subject: bool | None = None
+    filter_body: bool | None = None
+    filter_http_body: bool | None = None
+    filter_default_fail: bool | None = None
     grace: td | None = Field(None, ge=60, le=31536000)
     manual_resume: bool | None = None
     methods: Literal["", "POST"] | None = None
@@ -213,6 +215,19 @@ def ping(
     if check.methods == "POST" and method != "POST":
         action = "ign"
 
+    if action != "ign" and check.filter_http_body:
+        body_text = body.decode()
+        if check.failure_kw and match_keywords(body_text, check.failure_kw):
+            action = "fail"
+        elif check.success_kw and match_keywords(body_text, check.success_kw):
+            action = "success"
+        elif check.start_kw and match_keywords(body_text, check.start_kw):
+            action = "start"
+        elif check.filter_default_fail:
+            action = "fail"
+        else:
+            action = "ign"
+
     rid, rid_str = None, request.GET.get("rid")
     if rid_str is not None:
         if not is_valid_uuid_string(rid_str):
@@ -236,6 +251,9 @@ def ping_by_slug(
     action: str = "success",
     exitstatus: int | None = None,
 ) -> HttpResponse:
+    if slug != slug.lower():
+        return HttpResponseBadRequest("invalid url format")
+
     created = False
     try:
         check = Check.objects.get(slug=slug, project__ping_key=ping_key)
@@ -247,6 +265,13 @@ def ping_by_slug(
             project = Project.objects.get(ping_key=ping_key)
         except Project.DoesNotExist:
             return HttpResponseNotFound("not found")
+
+        profile = project.owner_profile
+        # When using auto-provisioning, users are allowed to temporarily
+        # exceed their check limit up to 2 times.
+        if profile.num_checks_used() >= profile.check_limit * 2:
+            return HttpResponseNotFound("not found")
+
         check = Check(project=project, name=slug, slug=slug)
         check.save()
         check.assign_all_channels()
@@ -309,9 +334,9 @@ def _update(check: Check, spec: Spec, v: int) -> None:
 
             matches = [c for c in available if str(c.code) == s or c.name == s]
             if len(matches) == 0:
-                raise BadChannelException("invalid channel identifier: %s" % s)
+                raise BadChannelException(f"invalid channel identifier: {s}")
             elif len(matches) > 1:
-                raise BadChannelException("non-unique channel identifier: %s" % s)
+                raise BadChannelException(f"non-unique channel identifier: {s}")
 
             new_channels.add(matches[0])
 
@@ -364,6 +389,8 @@ def _update(check: Check, spec: Spec, v: int) -> None:
         "failure_kw",
         "filter_subject",
         "filter_body",
+        "filter_http_body",
+        "filter_default_fail",
         "grace",
     ):
         v = getattr(spec, key)
@@ -501,13 +528,7 @@ def delete_check(request: ApiRequest, code: UUID) -> HttpResponse:
     if check.project_id != request.project.id:
         return HttpResponseForbidden()
 
-    # Start a transaction, select for update, delete.
-    # Use get_object_or_404 here again, in case another concurrent request
-    # has *just* deleted this check.
-    with transaction.atomic():
-        check = get_object_or_404(Check.objects.select_for_update(), code=code)
-        check.delete()
-
+    check.rename_and_delete()
     return JsonResponse(check.to_dict(v=request.v))
 
 
@@ -530,6 +551,10 @@ def pause(request: ApiRequest, code: UUID) -> HttpResponse:
     check = get_object_or_404(Check, code=code)
     if check.project_id != request.project.id:
         return HttpResponseForbidden()
+
+    # Return early, without creating a flip object, if the check is already paused
+    if check.status == "paused":
+        return JsonResponse(check.to_dict(v=request.v))
 
     # Track the status change for correct downtime calculation in Check.downtimes()
     check.create_flip("paused", mark_as_processed=True)
@@ -580,37 +605,18 @@ def pings(request: ApiRequest, code: UUID) -> HttpResponse:
     # There might be more pings in the database (depends on how pruning is handled)
     # but we will not return more than the limit allows.
     profile = Profile.objects.get(user__project=request.project)
-    limit = profile.ping_log_limit
+    # Cap the number of returned pings to 1000.
+    limit = min(profile.ping_log_limit, 1000)
 
     # Query in descending order so we're sure to get the most recent
     # pings, regardless of the limit restriction
     pings = list(Ping.objects.filter(owner=check).order_by("-id")[:limit])
+    prepare_durations(pings)
 
-    starts: dict[UUID | None, datetime | None] = {}
-    num_misses = 0
-    for ping in reversed(pings):
-        if ping.kind == "start":
-            starts[ping.rid] = ping.created
-        elif ping.kind in (None, "", "fail"):
-            if ping.rid not in starts:
-                # We haven't seen a start, success or fail event for this rid.
-                # Will need to fall back to Ping.duration().
-                num_misses += 1
-            else:
-                ping.duration = None
-                start = starts[ping.rid]
-                if start and (ping.created - start) < MAX_DURATION:
-                    ping.duration = ping.created - start
-
-            starts[ping.rid] = None
-
-    # If we will need to fall back to Ping.duration() more than 10 times
-    # then disable duration display altogether:
-    if num_misses > 10:
-        for ping in pings:
-            ping.duration = None
-
-    return JsonResponse({"pings": [p.to_dict() for p in pings]})
+    # Pass check's code to Ping.to_dict(), so it does not need to look it up
+    # (which would result in a database query)
+    ping_dicts = [p.to_dict(owner_code=check.code, v=request.v) for p in pings]
+    return JsonResponse({"pings": ping_dicts})
 
 
 @cors("GET")
@@ -849,7 +855,7 @@ def metrics(request: HttpRequest) -> HttpResponse:
     if not settings.METRICS_KEY:
         return HttpResponseForbidden()
 
-    key = request.META.get("HTTP_X_METRICS_KEY")
+    key = request.headers.get("X-Metrics-Key")
     if key != settings.METRICS_KEY:
         return HttpResponseForbidden()
 

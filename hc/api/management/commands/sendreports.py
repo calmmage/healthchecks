@@ -6,7 +6,9 @@ from argparse import ArgumentParser
 from types import FrameType
 from typing import Any
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db import close_old_connections, connection
 from django.db.models import Q
 from django.utils.timezone import now
 
@@ -81,7 +83,7 @@ class Command(BaseCommand):
             return True
 
         if profile.send_report(nag=True):
-            self.stdout.write("Sent nag to %s" % profile.user.email)
+            self.stdout.write(f"Sent nag to {profile.user.email}")
             # Pause before next report to avoid hitting sending quota
             self.pause()
         else:
@@ -96,12 +98,22 @@ class Command(BaseCommand):
         self.shutdown = True
 
     def handle(self, loop: bool, **options: Any) -> str:
+        db = settings.DATABASES["default"]
+        if "OPTIONS" in db and "application_name" in db["OPTIONS"]:
+            db["OPTIONS"]["application_name"] = "sendreports"
+
         self.shutdown = False
         signal.signal(signal.SIGTERM, self.on_signal)
         signal.signal(signal.SIGINT, self.on_signal)
 
         self.stdout.write("sendreports is now running")
         while not self.shutdown:
+            # The db connection may have timed out,
+            # make sure we have a working db connection.
+            # The if condition makes sure this does not run during tests.
+            if not connection.in_atomic_block:
+                close_old_connections()
+
             # Monthly reports
             while not self.shutdown and self.handle_one_report():
                 pass
