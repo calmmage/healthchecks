@@ -4,6 +4,7 @@ import json
 from urllib.parse import quote
 
 from django.conf import settings
+
 from hc.api.models import Flip, Notification
 from hc.api.transports import HttpTransport, TransportError, get_ping_body
 from hc.lib.string import replace
@@ -48,7 +49,7 @@ class Webhook(HttpTransport):
                 ctx["$EXITSTATUS"] = str(lp.exitstatus)
 
         for i, tag in enumerate(check.tags_list()):
-            ctx["$TAG%d" % (i + 1)] = safe(tag)
+            ctx[f"$TAG{i + 1}"] = safe(tag)
 
         result = replace(template, ctx)
         if latin1:
@@ -59,10 +60,9 @@ class Webhook(HttpTransport):
 
     def is_noop(self, status: str) -> bool:
         spec = self.channel.webhook_spec(status)
-        if not spec.url:
-            return True
-
-        return False
+        have_url = bool(spec.url)
+        # If we don't have an URL then this is a no-op
+        return not have_url
 
     def notify(self, flip: Flip, notification: Notification) -> None:
         if not settings.WEBHOOKS_ENABLED:

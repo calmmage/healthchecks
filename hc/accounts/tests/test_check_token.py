@@ -10,7 +10,7 @@ from hc.test import BaseTestCase
 class CheckTokenTestCase(BaseTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.profile.token = make_password("secret-token", "login")
+        self.profile.token = make_password("secret-token")
         self.profile.save()
 
         signed_token = TimestampSigner().sign("secret-token")
@@ -83,5 +83,5 @@ class CheckTokenTestCase(BaseTestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
 
         # Instead, it should set 2fa_user_id in the session
-        user_id, email, valid_until = self.client.session["2fa_user"]
+        user_id, _email, _valid_until = self.client.session["2fa_user"]
         self.assertEqual(user_id, self.alice.id)

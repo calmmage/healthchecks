@@ -22,7 +22,7 @@ class LoginTestCase(BaseTestCase):
         # It should not show validation errors yet
         self.assertNotContains(r, "This field is required")
 
-    @override_settings(EMAIL_HOST=None)
+    @override_settings(MAILERS={})
     def test_it_handles_no_smtp(self) -> None:
         r = self.client.get("/accounts/login/")
         self.assertNotContains(r, "magic-link-form")
@@ -208,7 +208,7 @@ class LoginTestCase(BaseTestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
 
         # Instead, it should set 2fa_user_id in the session
-        user_id, email, valid_until = self.client.session["2fa_user"]
+        user_id, _email, _valid_until = self.client.session["2fa_user"]
         self.assertEqual(user_id, self.alice.id)
 
     def test_redirect_to_webauthn_form_preserves_next(self) -> None:
@@ -234,7 +234,7 @@ class LoginTestCase(BaseTestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
 
         # Instead, it should set 2fa_user_id in the session
-        user_id, email, valid_until = self.client.session["2fa_user"]
+        user_id, _email, _valid_until = self.client.session["2fa_user"]
         self.assertEqual(user_id, self.alice.id)
 
     def test_redirect_to_totp_form_preserves_next(self) -> None:

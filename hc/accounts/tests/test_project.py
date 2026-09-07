@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core import mail
 from django.test.utils import override_settings
+
 from hc.accounts.models import Member, Project
 from hc.api.models import TokenBucket
 from hc.test import BaseTestCase
@@ -145,7 +146,7 @@ class ProjectTestCase(BaseTestCase):
 
         self.assertEmailContains("You will be able to manage")
 
-    @override_settings(EMAIL_HOST=None)
+    @override_settings(MAILERS={})
     def test_it_skips_invite_email_if_email_host_not_set(self) -> None:
         self.client.login(username="alice@example.org", password="password")
 
@@ -265,6 +266,16 @@ class ProjectTestCase(BaseTestCase):
 
         q = Member.objects.filter(project=self.project, user__email="frank@example.org")
         self.assertEqual(q.count(), 1)
+
+    def test_it_mangles_project_name_in_invite_email(self) -> None:
+        self.project.name = "https://example.org"
+        self.project.save()
+        self.client.login(username="alice@example.org", password="password")
+        form = {"invite_team_member": "1", "email": "frank@example.org", "role": "w"}
+        self.client.post(self.url, form)
+
+        self.assertEmailContainsHtml("<span>.</span>")
+        self.assertEmailContainsHtml("<span>://</span>")
 
     def test_it_lets_owner_remove_team_member(self) -> None:
         self.client.login(username="alice@example.org", password="password")

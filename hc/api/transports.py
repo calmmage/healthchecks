@@ -22,6 +22,8 @@ def get_ping_body_bytes(ping: Ping | None) -> bytes | None:
     If body has not been uploaded to object storage yet, wait 5 seconds
     and try to fetch it again.
     """
+    from hc.api.models import Ping
+
     if ping and ping.has_body():
         try:
             if result := ping.get_body_bytes():
@@ -191,7 +193,7 @@ class HttpTransport(Transport):
                 # If we have no tries left then abort the retry loop by re-raising
                 # the exception:
                 if tries_left == 0:
-                    raise e
+                    raise
 
     # Convenience wrapper around self.request for making "POST" requests
     @classmethod

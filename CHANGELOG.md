@@ -1,7 +1,27 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## v4.3-dev - Unreleased
+## v4.5-dev - Unreleased
+
+### Improvements
+- Fix project invite email template to mangle URLs in project names
+
+## v4.4 - 2026-08-31
+
+Important: this Healthchecks release is using Django 6.1, which has dropped support
+for PostgreSQL < 15, MySQL < 8.4, MariaDB < 10.11.
+
+### Improvements
+- Send flapping notices to all team members (not just the owner)
+- Upgrade to Django 6.1
+
+### Bug Fixes
+- Fix the email integration to sanitize long lines in .eml attachments
+- Fix race conditions when concurrent requests update the same check
+- Fix bounce signing code to produce shorter signatures
+- Security: fix the email verification link to depend on the email address
+
+## v4.3 - 2026-07-14
 
 ### Improvements
 - Send "Monthly Phone/SMS/WA Limit Reached" notice to all team members (not just owner)
@@ -12,6 +32,8 @@ All notable changes to this project will be documented in this file.
 - Switch from Selectize to Tom Select for dropdown controls
 - Implement Markdown formatting in Ntfy notifications
 - Update alert templates to report downtime duration (#1309)
+- Switch to Argon2 as the default hasher for passwords and login tokens
+- Optimize DB queries for team membership lookups and for the "Get Pings" API call
 
 ### Bug Fixes
 - Fix WebhookValidator to handle input that contains square brackets
@@ -19,6 +41,7 @@ All notable changes to this project will be documented in this file.
 - Enforce check limit (times two) when pinging by slug
 - Fix the "Edit Ntfy" form to preserve selected priorities when the form reloads
 - Fix the parsing of inbound emails with UTF8 body (#1311)
+- Add rate-limiting by email in the /accounts/signup view
 
 ## v4.2 - 2026-04-28
 

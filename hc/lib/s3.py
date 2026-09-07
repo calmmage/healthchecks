@@ -6,6 +6,7 @@ from threading import Thread
 from uuid import UUID
 
 from django.conf import settings
+
 from hc.lib.statsd import statsd
 
 try:
@@ -27,8 +28,7 @@ class GetObjectError(Exception):
 
 
 def client() -> Minio:
-    if not settings.S3_BUCKET:
-        raise Exception("Object storage is not configured")
+    assert settings.S3_BUCKET, "Object storage is not configured"
 
     global _client
     if _client is None:
@@ -114,7 +114,7 @@ def put_object(code: UUID, n: int, data: bytes) -> None:
                 print(f"InternalError, retrying ({retries=})...")
                 continue
 
-            raise e
+            raise
 
 
 def _remove_objects(code: UUID, upto_n: int) -> None:
@@ -122,7 +122,7 @@ def _remove_objects(code: UUID, upto_n: int) -> None:
     if upto_n <= 0:
         return
 
-    prefix = "%s/" % code
+    prefix = f"{code}/"
     start_after = prefix + enc(upto_n + 1)
     q = client().list_objects(settings.S3_BUCKET, prefix, start_after=start_after)
     delete_objs = [DeleteObject(obj.object_name) for obj in q]

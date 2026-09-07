@@ -78,7 +78,14 @@ def absolute_site_logo_url() -> str:
 
 @register.filter
 def mangle_link(s: str) -> SafeString:
-    return mark_safe(escape(s).replace(".", "<span>.</span>"))
+    # escape() returns SafeString, but SafeString.replace() returns str.
+    # To avoid flip-flopping between str and SafeString in the loop, convert it to
+    # str in the beginning, and mark_safe() it at the very end.
+    escaped = str(escape(s))
+    for fragment in (".", "://"):
+        escaped = escaped.replace(fragment, f"<span>{fragment}</span>")
+
+    return mark_safe(escaped)
 
 
 @register.simple_tag

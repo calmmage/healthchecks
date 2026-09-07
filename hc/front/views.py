@@ -205,8 +205,6 @@ def _refresh_last_active_date(request: AuthenticatedHttpRequest) -> None:
         # and push forward its expiry date:
         request.session["last_active"] = profile.last_active_date.timestamp()
 
-    return None
-
 
 def _get_referer_qs(request: HttpRequest) -> str:
     parsed = urlparse(request.headers.get("Referer", ""))
@@ -319,7 +317,7 @@ def status(request: HttpRequest, code: UUID) -> HttpResponse:
     if not request.user.is_authenticated:
         return HttpResponseForbidden()
 
-    project, rw = _get_project_for_user(request, code)
+    project, _rw = _get_project_for_user(request, code)
     checks = list(Check.objects.filter(project=project))
 
     details = []
@@ -402,15 +400,15 @@ def index(request: HttpRequest) -> HttpResponse:
     projects = list(q)
     any_down = False
     for project in projects:
-        setattr(project, "overall_status", summary[project.code]["status"])
-        setattr(project, "any_started", summary[project.code]["started"])
+        project.overall_status = summary[project.code]["status"]
+        project.any_started = summary[project.code]["started"]
         if summary[project.code]["status"] == "down":
             any_down = True
 
     # The list returned by projects() is already sorted . Do an additional sorting pass
     # to move projects with overall_status=down to the front (without changing their
     # relative order)
-    projects.sort(key=lambda p: getattr(p, "overall_status") != "down")
+    projects.sort(key=lambda p: p.overall_status != "down")
     ctx = {
         "page": "projects",
         "projects": projects,
@@ -434,7 +432,7 @@ def projects_menu(request: AuthenticatedHttpRequest) -> HttpResponse:
                 statuses[check.project_id] = status
 
     for p in projects:
-        setattr(p, "overall_status", statuses[p.id])
+        p.overall_status = statuses[p.id]
 
     return render(request, "front/projects_menu.html", {"projects": projects})
 
@@ -566,7 +564,7 @@ def update_name(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
         check.slug = form.cleaned_data["slug"]
         check.tags = form.cleaned_data["tags"]
         check.desc = form.cleaned_data["desc"]
-        check.save()
+        check.save(update_fields=("name", "slug", "tags", "desc"))
 
     if "/details/" in request.headers.get("Referer", ""):
         return redirect("hc-details", code)
@@ -583,17 +581,20 @@ def filtering_rules(request: AuthenticatedHttpRequest, code: UUID) -> HttpRespon
 
     form = forms.FilteringRulesForm(request.POST)
     if form.is_valid():
-        check.filter_subject = form.cleaned_data["filter_subject"]
-        check.filter_body = form.cleaned_data["filter_body"]
-        check.filter_http_body = form.cleaned_data["filter_http_body"]
-        check.filter_default_fail = form.cleaned_data["filter_default_fail"]
-        check.start_kw = form.cleaned_data["start_kw"]
-        check.success_kw = form.cleaned_data["success_kw"]
-        check.failure_kw = form.cleaned_data["failure_kw"]
-
-        check.methods = form.cleaned_data["methods"]
-        check.manual_resume = form.cleaned_data["manual_resume"]
-        check.save()
+        update_fields = (
+            "filter_subject",
+            "filter_body",
+            "filter_http_body",
+            "filter_default_fail",
+            "start_kw",
+            "success_kw",
+            "failure_kw",
+            "methods",
+            "manual_resume",
+        )
+        for field in update_fields:
+            setattr(check, field, form.cleaned_data[field])
+        check.save(update_fields=update_fields)
 
     return redirect("hc-details", code)
 
@@ -602,6 +603,7 @@ def filtering_rules(request: AuthenticatedHttpRequest, code: UUID) -> HttpRespon
 @login_required
 def update_timeout(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
     check = _get_rw_check_for_user(request, code)
+    fields = ("kind", "timeout", "grace", "schedule", "tz", "alert_after")
 
     kind = request.POST.get("kind")
     if kind == "simple":
@@ -653,12 +655,12 @@ def update_timeout(request: AuthenticatedHttpRequest, code: UUID) -> HttpRespons
             # Kick off nags. This would normally happen in the sendalerts management
             # command while processing a flip, but we have already marked the flip
             # as processed
-            check.save()
+            check.save(update_fields=fields + ("status",))
             check_saved = True
             check.project.update_next_nag_dates()
 
     if not check_saved:
-        check.save()
+        check.save(update_fields=fields)
 
     if "/details/" in request.headers.get("Referer", ""):
         return redirect("hc-details", code)
@@ -737,7 +739,7 @@ def ping_details(
     # * it calls ping.get_body(), which reads self.owner.code, triggering a query
     # * the template calls ping.duration() which queries past "/start" events
 
-    check, rw = _get_check_for_user(request, code)
+    check, _rw = _get_check_for_user(request, code)
     q = Ping.objects.filter(owner=check)
     if n:
         q = q.filter(n=n)
@@ -798,7 +800,7 @@ def ping_details(
 
 @login_required
 def ping_body(request: AuthenticatedHttpRequest, code: UUID, n: int) -> HttpResponse:
-    check, rw = _get_check_for_user(request, code)
+    check, _rw = _get_check_for_user(request, code)
     ping = get_object_or_404(Ping, owner=check, n=n)
 
     try:
@@ -830,7 +832,7 @@ def pause(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
     check.status = "paused"
     check.last_start = None
     check.alert_after = None
-    check.save()
+    check.save(update_fields=("status", "last_start", "alert_after"))
 
     # After pausing a check we must check if all checks are up,
     # and Profile.next_nag_date needs to be cleared out:
@@ -856,7 +858,7 @@ def resume(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
     check.last_start = None
     check.last_ping = None
     check.alert_after = None
-    check.save()
+    check.save(update_fields=("status", "last_start", "last_ping", "alert_after"))
 
     return redirect("hc-details", code)
 
@@ -882,7 +884,16 @@ def clear_events(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
     check.last_duration = None
     check.has_confirmation_link = False
     check.alert_after = None
-    check.save()
+    check.save(
+        update_fields=(
+            "status",
+            "last_ping",
+            "last_start",
+            "last_duration",
+            "has_confirmation_link",
+            "alert_after",
+        )
+    )
 
     check.ping_set.all().delete()
     check.notification_set.all().delete()
@@ -946,7 +957,7 @@ def _get_events(
 
 @login_required
 def log(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
-    check, rw = _get_check_for_user(request, code, preload_owner_profile=True)
+    check, _rw = _get_check_for_user(request, code, preload_owner_profile=True)
 
     smin = check.created
     smax = now()
@@ -1050,7 +1061,7 @@ def transfer(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
                 return HttpResponseBadRequest()
 
         check.project = target_project
-        check.save()
+        check.save(update_fields=("project",))
         check.assign_all_channels()
 
         messages.success(request, "Check transferred successfully!")
@@ -1138,7 +1149,7 @@ def status_single(request: HttpRequest, code: UUID) -> HttpResponse:
 
 @login_required
 def badges(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
-    project, rw = _get_project_for_user(request, code)
+    project, _rw = _get_project_for_user(request, code)
 
     if request.method == "POST":
         form = forms.BadgeSettingsForm(request.POST)
@@ -1147,7 +1158,7 @@ def badges(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
 
         fmt = form.cleaned_data["fmt"]
         states = form.cleaned_data["states"]
-        with_late = True if states == "3" else False
+        with_late = states == "3"
         if form.cleaned_data["target"] == "all":
             label = settings.MASTER_BADGE_LABEL
             url = get_badge_url(project.badge_key, "*", fmt, with_late)
@@ -1291,7 +1302,7 @@ def update_channel_name(request: AuthenticatedHttpRequest, code: UUID) -> HttpRe
 def send_test_notification(
     request: AuthenticatedHttpRequest, code: UUID
 ) -> HttpResponse:
-    channel, rw = _get_channel_for_user(request, code)
+    channel, _rw = _get_channel_for_user(request, code)
 
     dummy = Check(name="TEST", status="down", project=channel.project)
     dummy.last_ping = now() - td(days=1)
@@ -1376,7 +1387,7 @@ def log_events(request: HttpRequest, code: UUID) -> HttpResponse:
     if not request.user.is_authenticated:
         return HttpResponseForbidden()
 
-    check, rw = _get_check_for_user(request, code, preload_owner_profile=True)
+    check, _rw = _get_check_for_user(request, code, preload_owner_profile=True)
     form = forms.LogFiltersForm(request.GET)
     if not form.is_valid():
         return HttpResponseBadRequest()

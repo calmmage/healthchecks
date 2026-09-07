@@ -167,12 +167,12 @@ class NotifyPushoverTestCase(BaseTestCase):
 
         self.assertEqual(mock_post.call_count, 2)
 
-        cancel_args, cancel_kwargs = mock_post.call_args_list[0]
+        cancel_call = mock_post.call_args_list[0]
         expected = f"/receipts/cancel_by_tag/{self.check.unique_key}.json"
-        self.assertEqual(cancel_args[1], API + expected)
+        self.assertEqual(cancel_call.args[1], API + expected)
 
-        up_args, up_kwargs = mock_post.call_args_list[1]
-        payload = up_kwargs["data"]
+        up_call = mock_post.call_args_list[1]
+        payload = up_call.kwargs["data"]
         self.assertEqual(payload["title"], "🟢 Foo is UP")
 
     @patch("hc.api.transports.curl.request", autospec=True)
@@ -226,7 +226,7 @@ class NotifyPushoverTestCase(BaseTestCase):
         self._setup_data("123|0")
         mock_post.return_value.status_code = 200
 
-        for i in range(0, 11):
+        for i in range(11):
             other = Check(project=self.project)
             other.name = f"Foobar #{i}"
             other.status = "down"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import socket
 import uuid
@@ -517,11 +518,7 @@ class Check(models.Model):
                 self.last_start = frozen_now
                 self.last_start_rid = rid
                 # Don't update "last_ping" field.
-            elif action == "ign":
-                pass
-            elif action == "log":
-                pass
-            else:
+            elif action in ("success", "fail"):
                 self.last_ping = frozen_now
                 self.last_duration = None
                 if self.last_start:
@@ -629,8 +626,8 @@ class Check(models.Model):
         # A list of flips and time interval boundaries
         events = [(b, "---") for b in boundaries]
         q = self.flip_set.filter(created__gt=min(boundaries))
-        for pair in q.values_list("created", "old_status"):
-            events.append(pair)
+        pair_q = q.values_list("created", "old_status")
+        events.extend(pair_q)
 
         # Iterate through flips and boundaries,
         # and for each "down" event increase the counters in `totals`.
@@ -738,10 +735,17 @@ class Ping(models.Model):
         return result
 
     def has_body(self) -> bool:
-        if self.body_raw or self.object_size:
+        # Non-zero object size tells us there should be ping body in object store
+        if self.object_size:
             return True
 
-        return False
+        # If the ping instance has "body_raw_length" attribute,
+        # use that instead of body_raw itself. This enables a defer("body_raw")
+        # optimization in the "Get Pings" API call.
+        if hasattr(self, "body_raw_length"):
+            return bool(self.body_raw_length)
+
+        return bool(self.body_raw)
 
     def get_body_bytes(self) -> bytes | None:
         if self.object_size and self.n:
@@ -1064,9 +1068,10 @@ class Channel(models.Model):
         self.checks.add(*checks)
 
     def make_token(self) -> str:
-        seed = str(self.code) + settings.SECRET_KEY
-        seed_bytes = seed.encode()
-        return hashlib.sha256(seed_bytes).hexdigest()
+        key_bytes = settings.SECRET_KEY.encode()
+        msg = str(self.code) + self.email.value
+        msg_bytes = msg.encode()
+        return hmac.new(key_bytes, msg_bytes, "sha256").hexdigest()
 
     def send_verify_link(self) -> None:
         args = [self.code, self.make_token()]
@@ -1483,8 +1488,8 @@ class TokenBucket(models.Model):
         salted_encoded = (email + settings.SECRET_KEY).encode()
         hashed = hashlib.sha1(salted_encoded).hexdigest()
 
-        # 20 login attempts for a single email per hour:
-        return TokenBucket.authorize(f"em-{hashed}", 20, 3600)
+        # 10 login attempts for a single email per hour:
+        return TokenBucket.authorize(f"em-{hashed}", 10, 3600)
 
     @staticmethod
     def authorize_invite(user: User) -> bool:

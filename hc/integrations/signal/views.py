@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
+
 from hc.accounts.http import AuthenticatedHttpRequest
 from hc.api.models import Channel, TokenBucket
 from hc.api.transports import TransportError
@@ -70,8 +71,7 @@ def signal_captcha(request: AuthenticatedHttpRequest) -> HttpResponse:
     if request.method == "POST":
         challenge = request.POST.get("challenge", "")
         captcha = request.POST.get("captcha", "")
-        if captcha.startswith("signalcaptcha://"):
-            captcha = captcha[16:]
+        captcha = captcha.removeprefix("signalcaptcha://")
 
         payload = {
             "jsonrpc": "2.0",

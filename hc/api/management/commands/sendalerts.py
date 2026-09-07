@@ -86,7 +86,7 @@ class Command(BaseCommand):
                 self.stdout.write(logs)
         except Exception as exc:
             logger.error("Exception in notify", exc_info=exc)
-            raise exc
+            raise
 
     def process_one_flip(self) -> bool:
         """Find unprocessed flip, send notifications.
@@ -143,12 +143,12 @@ class Command(BaseCommand):
 
         try:
             status = check.get_status()
-        except Exception as e:
+        except Exception:
             # Make sure we don't trip on this check again for an hour:
             # Otherwise sendalerts may end up in a crash loop.
             q.update(alert_after=now() + td(hours=1))
             # Then re-raise the exception:
-            raise e
+            raise
 
         if status != "down":
             # It is not down yet. Update alert_after

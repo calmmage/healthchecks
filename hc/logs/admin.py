@@ -13,13 +13,14 @@ class RecordsAdmin(ModelAdmin[Record]):
     class Media:
         css = {"all": ("css/admin/records.css",)}
 
-    search_fields = ["name", "message"]
+    search_fields = ("name", "message")
     readonly_fields = ("message",)
     list_display = ("when", "host", "logger", "message_traceback")
     list_filter = (
         "created",
         "level",
     )
+    list_per_page = 200
 
     def when(self, obj: Record) -> str:
         return obj.created.strftime("%b %-d, %H:%M")

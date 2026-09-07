@@ -46,7 +46,7 @@ class NotifyGotidyTestCase(BaseTestCase):
         self.channel.notify(self.flip)
         assert Notification.objects.count() == 1
 
-        method, url = mock_post.call_args.args
+        _method, url = mock_post.call_args.args
         self.assertEqual(url, "https://example.org/message?token=abc")
 
         payload = mock_post.call_args.kwargs["json"]
@@ -89,7 +89,7 @@ class NotifyGotidyTestCase(BaseTestCase):
 
         self.channel.notify(self.flip)
 
-        method, url = mock_post.call_args.args
+        _method, url = mock_post.call_args.args
         self.assertEqual(url, "https://example.org/sub/message?token=abc")
 
     @patch("hc.api.transports.curl.request", autospec=True)
@@ -101,7 +101,7 @@ class NotifyGotidyTestCase(BaseTestCase):
 
         self.channel.notify(self.flip)
 
-        method, url = mock_post.call_args.args
+        _method, url = mock_post.call_args.args
         self.assertEqual(url, "https://example.org/sub/message?token=abc")
 
     @patch("hc.api.transports.curl.request", autospec=True)
@@ -152,7 +152,7 @@ class NotifyGotidyTestCase(BaseTestCase):
     def test_it_does_not_show_more_than_10_other_checks(self, mock_post: Mock) -> None:
         mock_post.return_value.status_code = 200
 
-        for i in range(0, 11):
+        for i in range(11):
             other = Check(project=self.project)
             other.name = f"Foobar #{i}"
             other.status = "down"

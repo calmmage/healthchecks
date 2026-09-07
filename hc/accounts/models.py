@@ -122,7 +122,7 @@ class Profile(models.Model):
     def prepare_token(self) -> str:
         token = token_urlsafe(24)
         # Store a hashed transformation of the login token
-        self.token = make_password(token, "login")
+        self.token = make_password(token)
         self.save()
         # Sign the token so we can check its age later
         return TimestampSigner().sign(token)
@@ -133,7 +133,7 @@ class Profile(models.Model):
         except BadSignature:
             return False
 
-        return "login" in self.token and check_password(token, self.token)
+        return check_password(token, self.token)
 
     def send_instant_login_link(
         self, membership: Member | None = None, redirect_url: str | None = None
@@ -182,20 +182,28 @@ class Profile(models.Model):
         }
         emails.transfer_request(self.user.email, ctx)
 
+    def project_ids(self) -> QuerySet[Project, tuple[int]]:
+        """Return a queryset returning IDs of all projects we have access to."""
+        # Construct a UNION of two simple queries. This could be alternatively
+        # be done in a single query and filtering by Q(is_owner) | Q(is_member).
+        # But the single query approach has significantly worse performance
+        # on PostgreSQL.
+        owned_ids = Project.objects.filter(owner_id=self.user_id).values_list("id")
+        joined_ids = Member.objects.filter(user_id=self.user_id).values_list(
+            "project_id"
+        )
+        return owned_ids.union(joined_ids)
+
     def projects(self) -> QuerySet[Project]:
         """Return a queryset of all projects we have access to."""
-
-        is_owner = Q(owner_id=self.user_id)
-        is_member = Q(member__user_id=self.user_id)
-        q = Project.objects.filter(is_owner | is_member)
-        return q.distinct().order_by(Lower("name"))
+        return Project.objects.filter(id__in=self.project_ids()).order_by(Lower("name"))
 
     def checks_from_all_projects(self) -> CheckQuerySet:
         """Return a queryset of checks from projects we have access to."""
 
         from hc.api.models import Check
 
-        return Check.objects.filter(project__in=self.projects())
+        return Check.objects.filter(project__in=self.project_ids())
 
     def send_report(self, nag: bool = False) -> bool:
         q = self.checks_from_all_projects()
@@ -371,7 +379,7 @@ class Profile(models.Model):
                 return dt
             if self.reports == "monthly" and dt.day == 1:
                 return dt
-            elif self.reports == "weekly" and dt.weekday() == 0:
+            if self.reports == "weekly" and dt.weekday() == 0:
                 return dt
 
     def is_past_over_limit_grace(self) -> bool:
@@ -443,6 +451,9 @@ class Project(models.Model):
     show_slugs = models.BooleanField(default=False)
 
     objects = ProjectManager()
+    # used in hc.front.views to cache the aggregate status of all checks in the project
+    overall_status: str
+    any_started: bool
 
     def __str__(self) -> str:
         return self.name or self.owner.email
@@ -469,7 +480,7 @@ class Project(models.Model):
         m = Member.objects.create(user=user, project=self, role=role)
         checks_url = reverse("hc-checks", args=[self.code])
 
-        if settings.EMAIL_HOST:
+        if settings.MAILERS:
             profile = Profile.objects.for_user(user)
             profile.send_instant_login_link(membership=m, redirect_url=checks_url)
         return True
@@ -477,14 +488,15 @@ class Project(models.Model):
     def update_next_nag_dates(self) -> None:
         """Update next_nag_date on profiles of all members of this project."""
 
-        is_owner = Q(user_id=self.owner_id)
-        is_member = Q(user__memberships__project=self)
-        q = Profile.objects.filter(is_owner | is_member).exclude(nag_period=NO_NAG)
+        # Use an UNION of two simple queries to look up project's user ids.
+        # On PostgreSQL this is much faster than using JOIN.
+        owner_id = User.objects.filter(id=self.owner_id).values_list("id")
+        member_ids = Member.objects.filter(project=self).values_list("user_id")
+        user_ids = owner_id.union(member_ids)
 
+        q = Profile.objects.filter(user_id__in=user_ids).exclude(nag_period=NO_NAG)
         for profile in q:
             profile.update_next_nag_date()
-
-        return None
 
     def get_n_down(self) -> int:
         result = 0
@@ -502,7 +514,7 @@ class Project(models.Model):
             return True
 
         # It's a problem if any integration has a logged error
-        return True if max(errors) else False
+        return any(errors)
 
     def transfer_request(self) -> Member | None:
         return self.member_set.filter(transfer_request_date__isnull=False).first()
